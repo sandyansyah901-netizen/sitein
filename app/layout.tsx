@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import Header from "@/app/components/Header";
 import { AuthProvider } from "@/app/lib/auth";
 
 const geistSans = Geist({
@@ -15,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "KomikHub - Baca Manga, Manhwa & Manhua Online",
+  title: "Sitein - Baca Manga, Manhwa & Manhua Online",
   description:
     "Baca komik manga, manhwa, dan manhua terlengkap dan terupdate. Gratis tanpa iklan!",
 };
@@ -30,10 +29,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <Header />
-          {children}
-        </AuthProvider>
+        <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
   );
