@@ -84,22 +84,19 @@ export default function SearchBar({ variant = "default", onClose }: SearchBarPro
     }, 300);
   };
 
-  // Submit → navigasi ke halaman hasil (logic lama)
+  // Submit → navigasi ke halaman pencarian /search
   const handleSearch = useCallback(
     (e?: React.FormEvent | React.MouseEvent) => {
       e?.preventDefault();
       setShowDropdown(false);
-      const params = new URLSearchParams(searchParams.toString());
-      if (query.trim()) {
-        params.set("search", query.trim());
-      } else {
-        params.delete("search");
-      }
+      const q = query.trim();
+      const params = new URLSearchParams();
+      if (q) params.set("search", q);
       params.set("page", "1");
-      router.push(`/?${params.toString()}`);
+      router.push(`/search?${params.toString()}`);
       onClose?.();
     },
-    [query, searchParams, router, onClose]
+    [query, router, onClose]
   );
 
   // Klik suggestion → detail manga
@@ -197,9 +194,18 @@ export default function SearchBar({ variant = "default", onClose }: SearchBarPro
                   <div className="w-9 h-12 shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-[#222]">
                     {s.cover_url ? (
                       <img
-                        src={s.cover_url.startsWith("http") ? s.cover_url : `${API_BASE}${s.cover_url}`}
+                        src={(() => {
+                          try {
+                            // Kalau URL absolut, ambil path-nya saja supaya Next.js proxy yang handle
+                            const u = new URL(s.cover_url);
+                            return u.pathname;
+                          } catch {
+                            // Sudah path relatif, pakai langsung
+                            return s.cover_url.startsWith("/") ? s.cover_url : `/${s.cover_url}`;
+                          }
+                        })()}
                         alt={s.title}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-300 text-xs">?</div>

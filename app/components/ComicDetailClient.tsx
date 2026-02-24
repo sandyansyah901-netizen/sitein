@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  Heart,
+  BookMarked,
   BookOpen,
   Layers,
   Calendar,
@@ -13,6 +13,8 @@ import {
   ChevronUp,
 } from "lucide-react";
 import type { Manga, Chapter } from "@/app/lib/api";
+import { addBookmark, removeBookmark, checkBookmark } from "@/app/lib/user-api";
+import { useAuth } from "@/app/lib/auth";
 
 interface Props {
   manga: Manga;
@@ -45,10 +47,20 @@ export default function ComicDetailClient({
   typeSlug,
 }: Props) {
   const router = useRouter();
+  const { token, isLoggedIn } = useAuth();
   const [activeTab, setActiveTab] = useState<"home" | "info" | "news">("home");
-  const [liked, setLiked] = useState(false);
+  const [bookmarked, setBookmarked] = useState(false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  // Cek status bookmark saat mount
+  useEffect(() => {
+    if (!token || !isLoggedIn) return;
+    checkBookmark(token, manga.slug)
+      .then((res) => setBookmarked(res.is_bookmarked))
+      .catch(() => { });
+  }, [token, isLoggedIn, manga.slug]);
 
   const sortedChapters = [...chapters].sort((a, b) => {
     const diff = a.chapter_main - b.chapter_main || a.chapter_sub - b.chapter_sub;
@@ -149,26 +161,49 @@ export default function ComicDetailClient({
           {/* Status badge */}
           {manga.status && (
             <span
-              className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full mb-3 ${
-                manga.status.toLowerCase() === "completed"
-                  ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
-                  : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-              }`}
+              className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full mb-3 ${manga.status.toLowerCase() === "completed"
+                ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                }`}
             >
               {manga.status}
             </span>
           )}
 
-          {/* Heart button */}
+          {/* Bookmark button */}
           <button
-            onClick={() => setLiked((v) => !v)}
-            className="flex items-center gap-1.5 text-[12px] text-gray-500 dark:text-gray-400 hover:text-[#E50914] transition-colors"
-            aria-label="Like"
+            onClick={async () => {
+              if (!token || !isLoggedIn) {
+                window.dispatchEvent(new CustomEvent("open-login-modal"));
+                return;
+              }
+              if (bookmarkLoading) return;
+              setBookmarkLoading(true);
+              try {
+                if (bookmarked) {
+                  await removeBookmark(token, manga.slug);
+                  setBookmarked(false);
+                } else {
+                  await addBookmark(token, manga.slug);
+                  setBookmarked(true);
+                }
+              } catch {
+                /* silent */
+              } finally {
+                setBookmarkLoading(false);
+              }
+            }}
+            disabled={bookmarkLoading}
+            className={`flex items-center gap-1.5 text-[12px] transition-colors disabled:opacity-50 ${bookmarked
+              ? "text-[#E50914]"
+              : "text-gray-500 dark:text-gray-400 hover:text-[#E50914]"
+              }`}
+            aria-label="Bookmark"
           >
-            <Heart
-              className={`w-4 h-4 ${liked ? "fill-[#E50914] text-[#E50914]" : ""}`}
+            <BookMarked
+              className={`w-4 h-4 ${bookmarked ? "fill-[#E50914]" : ""}`}
             />
-            <span>{liked ? "Liked" : "Like"}</span>
+            <span>{bookmarked ? "Bookmarked" : "Bookmark"}</span>
           </button>
         </div>
       </div>
@@ -198,11 +233,10 @@ export default function ComicDetailClient({
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 rounded-full text-[12px] font-semibold capitalize transition-colors ${
-              activeTab === tab
-                ? "bg-[#E50914] text-white"
-                : "border border-gray-300 dark:border-[#333] text-[#555] dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914]"
-            }`}
+            className={`px-4 py-1.5 rounded-full text-[12px] font-semibold capitalize transition-colors ${activeTab === tab
+              ? "bg-[#E50914] text-white"
+              : "border border-gray-300 dark:border-[#333] text-[#555] dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914]"
+              }`}
           >
             {tab === "home" ? "Episodes" : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
