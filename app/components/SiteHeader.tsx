@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState, useEffect } from "react";
-import { Search, Sun, Moon, Menu, X } from "lucide-react";
+import { Sun, Moon, Menu, X } from "lucide-react";
+import SearchBar from "./SearchBar";
 
 export default function SiteHeader() {
   const [isDark, setIsDark] = useState(false);
@@ -67,14 +68,9 @@ export default function SiteHeader() {
 
           <div className="flex-1" />
 
-          {/* Search bar (desktop) */}
-          <div className="hidden md:flex items-center gap-1 bg-[#f5f5f5] dark:bg-[#1a1a1a] rounded-full px-3 py-1.5 mr-2 w-[180px] transition-colors">
-            <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-            <input
-              type="text"
-              placeholder="Search..."
-              className="bg-transparent text-[12px] outline-none w-full text-[#333] dark:text-gray-200 placeholder-gray-400"
-            />
+          {/* Search bar (desktop) — pakai SearchBar compact dengan suggest */}
+          <div className="hidden md:flex items-center mr-2 w-[220px] relative">
+            <SearchBar variant="compact" />
           </div>
 
           {/* Right icons */}
@@ -85,7 +81,15 @@ export default function SiteHeader() {
               className="md:hidden p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition-colors"
               aria-label="Search"
             >
-              <Search className="w-4 h-4 text-[#555] dark:text-gray-400" />
+              <X className={`w-4 h-4 text-[#555] dark:text-gray-400 ${searchOpen ? "block" : "hidden"}`} />
+              <svg
+                className={`w-4 h-4 text-[#555] dark:text-gray-400 ${searchOpen ? "hidden" : "block"}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </button>
 
             {/* Dark mode toggle */}
@@ -116,18 +120,10 @@ export default function SiteHeader() {
           </div>
         </div>
 
-        {/* Mobile search bar */}
+        {/* Mobile search bar — pakai SearchBar compact dengan suggest */}
         {searchOpen && (
-          <div className="md:hidden pb-2">
-            <div className="flex items-center gap-1 bg-[#f5f5f5] dark:bg-[#1a1a1a] rounded-full px-3 py-1.5">
-              <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-              <input
-                type="text"
-                placeholder="Search..."
-                autoFocus
-                className="bg-transparent text-[12px] outline-none w-full text-[#333] dark:text-gray-200 placeholder-gray-400"
-              />
-            </div>
+          <div className="md:hidden pb-3 pt-1">
+            <SearchBar variant="compact" onClose={() => setSearchOpen(false)} />
           </div>
         )}
       </div>
