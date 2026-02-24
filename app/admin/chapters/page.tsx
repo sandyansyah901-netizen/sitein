@@ -7,22 +7,31 @@ import {
   adminDeleteThumbnail, fetchThumbnailInfo, type AdminChapter,
 } from "@/app/lib/admin-api";
 
+// ── Mode filter: bisa by ID atau by judul/slug ──────────────────────────────
+type FilterMode = "id" | "title";
+
 export default function AdminChaptersPage() {
   const searchParams = useSearchParams();
   const initMangaId = searchParams.get("manga_id") ?? "";
 
-  const [chapters, setChapters] = useState<AdminChapter[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [chapters, setChapters]     = useState<AdminChapter[]>([]);
+  const [total, setTotal]           = useState(0);
+  const [page, setPage]             = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [mangaId, setMangaId] = useState(initMangaId);
-  const [mangaIdInput, setMangaIdInput] = useState(initMangaId);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+
+  // ── Filter state ───────────────────────────────────────────────────────────
+  const [filterMode, setFilterMode]         = useState<FilterMode>("id");
+  const [mangaId, setMangaId]               = useState(initMangaId);
+  const [mangaIdInput, setMangaIdInput]     = useState(initMangaId);
+  const [mangaSearch, setMangaSearch]       = useState("");
+  const [mangaSearchInput, setMangaSearchInput] = useState("");
+
+  const [isLoading, setIsLoading]   = useState(true);
+  const [error, setError]           = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [thumbInfo, setThumbInfo] = useState<Record<number, unknown>>({});
+  const [thumbInfo, setThumbInfo]   = useState<Record<number, unknown>>({});
   const [generatingId, setGeneratingId] = useState<number | null>(null);
-  const [msgs, setMsgs] = useState<{ type: "ok" | "err"; text: string }[]>([]);
+  const [msgs, setMsgs]             = useState<{ type: "ok" | "err"; text: string }[]>([]);
 
   const addMsg = (type: "ok" | "err", text: string) =>
     setMsgs((p) => [{ type, text }, ...p].slice(0, 5));
@@ -31,7 +40,10 @@ export default function AdminChaptersPage() {
     setIsLoading(true); setError("");
     try {
       const data = await fetchAdminChapters({
-        manga_id: mangaId ? Number(mangaId) : undefined,
+        // Filter by ID jika mode "id" dan ada input
+        manga_id:   filterMode === "id" && mangaId ? Number(mangaId) : undefined,
+        // Filter by judul/slug jika mode "title" dan ada input
+        manga_slug: filterMode === "title" && mangaSearch ? mangaSearch : undefined,
         page, page_size: 20,
       });
       const items = data.items ?? data.chapters ?? [];
@@ -41,9 +53,18 @@ export default function AdminChaptersPage() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Gagal memuat chapters");
     } finally { setIsLoading(false); }
-  }, [page, mangaId]);
+  }, [page, mangaId, mangaSearch, filterMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Reset filter ────────────────────────────────────────────────────────────
+  const handleReset = () => {
+    setMangaId(""); setMangaIdInput("");
+    setMangaSearch(""); setMangaSearchInput("");
+    setPage(1);
+  };
+
+  const isFiltered = filterMode === "id" ? !!mangaId : !!mangaSearch;
 
   const handleDelete = async (ch: AdminChapter) => {
     const deleteGdrive = confirm("Hapus juga files di Google Drive?\nOK = Ya | Cancel = Tidak");
@@ -90,18 +111,98 @@ export default function AdminChaptersPage() {
         <p className="mt-1 text-sm text-muted">Total <span className="font-semibold text-foreground">{total}</span> chapters</p>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-3">
-        <div className="flex gap-2">
-          <input type="number" value={mangaIdInput} onChange={(e) => setMangaIdInput(e.target.value)}
-            placeholder="Filter by Manga ID"
-            className="w-48 rounded-lg border border-border bg-card-bg px-3 py-2 text-sm text-foreground placeholder-muted outline-none focus:border-accent" />
-          <button onClick={() => { setMangaId(mangaIdInput); setPage(1); }}
-            className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">Filter</button>
-          {mangaId && (
-            <button onClick={() => { setMangaId(""); setMangaIdInput(""); setPage(1); }}
-              className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground">✕ Reset</button>
-          )}
+      {/* ── Filter ─────────────────────────────────────────────────────────── */}
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+
+        {/* Toggle mode */}
+        <div className="flex rounded-lg border border-border overflow-hidden text-sm">
+          <button
+            onClick={() => { setFilterMode("id"); handleReset(); }}
+            className={`px-3 py-2 font-semibold transition-colors ${
+              filterMode === "id"
+                ? "bg-accent text-white"
+                : "bg-card-bg text-muted hover:text-foreground"
+            }`}
+          >
+            By ID
+          </button>
+          <button
+            onClick={() => { setFilterMode("title"); handleReset(); }}
+            className={`px-3 py-2 font-semibold transition-colors ${
+              filterMode === "title"
+                ? "bg-accent text-white"
+                : "bg-card-bg text-muted hover:text-foreground"
+            }`}
+          >
+            By Judul / Slug
+          </button>
         </div>
+
+        {/* Input sesuai mode */}
+        {filterMode === "id" ? (
+          <form
+            onSubmit={(e) => { e.preventDefault(); setMangaId(mangaIdInput); setPage(1); }}
+            className="flex gap-2"
+          >
+            <input
+              type="number"
+              value={mangaIdInput}
+              onChange={(e) => setMangaIdInput(e.target.value)}
+              placeholder="Manga ID..."
+              className="w-40 rounded-lg border border-border bg-card-bg px-3 py-2 text-sm text-foreground placeholder-muted outline-none focus:border-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
+            >
+              Filter
+            </button>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground"
+              >
+                ✕ Reset
+              </button>
+            )}
+          </form>
+        ) : (
+          <form
+            onSubmit={(e) => { e.preventDefault(); setMangaSearch(mangaSearchInput); setPage(1); }}
+            className="flex gap-2"
+          >
+            <input
+              type="text"
+              value={mangaSearchInput}
+              onChange={(e) => setMangaSearchInput(e.target.value)}
+              placeholder="Cari judul atau slug manga..."
+              className="w-64 rounded-lg border border-border bg-card-bg px-3 py-2 text-sm text-foreground placeholder-muted outline-none focus:border-accent"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover"
+            >
+              Cari
+            </button>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={handleReset}
+                className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground"
+              >
+                ✕ Reset
+              </button>
+            )}
+          </form>
+        )}
+
+        {/* Badge aktif filter */}
+        {isFiltered && (
+          <span className="rounded-full bg-accent/10 px-3 py-1 text-xs font-semibold text-accent">
+            {filterMode === "id" ? `Manga ID: ${mangaId}` : `Cari: "${mangaSearch}"`}
+          </span>
+        )}
       </div>
 
       {msgs.length > 0 && (
@@ -190,10 +291,10 @@ export default function AdminChaptersPage() {
                           </button>
                         </div>
                         {thumbInfo[ch.id] !== undefined && (
-  <div className="rounded bg-background p-1.5 text-[10px] font-mono text-muted max-w-[180px] truncate">
-    {JSON.stringify(thumbInfo[ch.id] as Record<string, unknown>).slice(0, 80)}…
-  </div>
-)}
+                          <div className="rounded bg-background p-1.5 text-[10px] font-mono text-muted max-w-[180px] truncate">
+                            {JSON.stringify(thumbInfo[ch.id] as Record<string, unknown>).slice(0, 80)}…
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
