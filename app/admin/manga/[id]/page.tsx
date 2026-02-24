@@ -99,6 +99,9 @@ export default function AdminMangaPage() {
   };
 
   // ── Start Sync ────────────────────────────────────────────────────────────
+  // ✅ FIXED: Panggil adminSyncCoversFromGdrive() 1x saja.
+  // Backend sudah handle sync SEMUA cover sekaligus dalam 1 request.
+  // Sebelumnya: loop per manga → N request × semua cover = waste bandwidth.
   const handleStartSync = async () => {
     if (!confirm(`Sync cover untuk SEMUA manga?\n\nProses ini akan mendownload cover dari GDrive ke server lokal. Bisa memakan waktu cukup lama.`))
       return;
@@ -112,44 +115,46 @@ export default function AdminMangaPage() {
     setIsSyncing(true);
 
     try {
-      // Ambil semua manga dulu
-      const all = allManga.length > 0 ? allManga : await fetchAllManga();
-      setSyncTotal(all.length);
+      setSyncCurrentTitle("Syncing semua cover dari GDrive...");
 
-      for (const manga of all) {
-        if (abortRef.current) {
-          setSyncAborted(true);
-          break;
-        }
+      // ✅ 1 request saja — backend sudah sync semua cover
+      const result = await adminSyncCoversFromGdrive() as {
+        success?: number;
+        failed?: number;
+        results?: { filename: string; status: string }[];
+      };
 
-        setSyncCurrentTitle(manga.title);
+      const successCount = result?.success ?? 0;
+      const failedCount  = result?.failed ?? 0;
+      const total        = successCount + failedCount;
 
-        try {
-          await adminSyncCoversFromGdrive();
-          setSyncResults((prev) => [
-            { status: "ok", manga, message: "Cover berhasil di-sync" },
-            ...prev,
-          ]);
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : "Gagal";
-          // Cek apakah manga memang tidak punya cover → skip, bukan error
-          const isSkip = msg.toLowerCase().includes("no cover") ||
-                         msg.toLowerCase().includes("not found") ||
-                         !manga.cover_url;
-          setSyncResults((prev) => [
-            {
-              status: isSkip ? "skip" : "err",
-              manga,
-              message: isSkip ? "Tidak ada cover" : msg,
-            },
-            ...prev,
-          ]);
-        }
+      setSyncTotal(total > 0 ? total : allManga.length);
+      setSyncDone(total > 0 ? total : allManga.length);
 
-        setSyncDone((d) => d + 1);
+      // Kalau backend return detail per file → map ke syncResults
+      if (result?.results && Array.isArray(result.results) && result.results.length > 0) {
+        setSyncResults(
+          result.results.map((r) => ({
+            status: r.status === "ok" ? "ok" : "err",
+            manga: { title: r.filename } as AdminManga,
+            message: r.status === "ok" ? "Cover berhasil di-sync" : "Gagal",
+          }))
+        );
+      } else {
+        // Fallback: tampilkan 1 baris summary
+        setSyncResults([{
+          status: failedCount === 0 ? "ok" : "err",
+          manga: { title: "Semua cover" } as AdminManga,
+          message: `${successCount} berhasil${failedCount > 0 ? `, ${failedCount} gagal` : ""}`,
+        }]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Sync gagal");
+      setSyncResults([{
+        status: "err",
+        manga: { title: "Semua cover" } as AdminManga,
+        message: e instanceof Error ? e.message : "Sync gagal",
+      }]);
     } finally {
       setIsSyncing(false);
       setSyncCurrentTitle("");
