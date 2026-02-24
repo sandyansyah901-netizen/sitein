@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Sun, Moon, Menu, X } from "lucide-react";
 
 export default function SiteHeader() {
@@ -9,15 +9,35 @@ export default function SiteHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
 
+  // Sync state dengan class yg ada di <html> saat mount
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const shouldBeDark = saved === "dark" || (!saved && prefersDark);
+
+    if (shouldBeDark) {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    } else {
+      document.documentElement.classList.remove("dark");
+      setIsDark(false);
+    }
+  }, []);
+
   const toggleTheme = () => {
-    setIsDark((prev) => !prev);
-    if (typeof document !== "undefined") {
-      document.documentElement.classList.toggle("dark");
+    const newDark = !isDark;
+    setIsDark(newDark);
+    if (newDark) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
     }
   };
 
   return (
-    <header className="sticky top-0 z-50 bg-white dark:bg-[#0a0a0a] border-b border-gray-100 dark:border-[#1e1e1e]">
+    <header className="sticky top-0 z-50 bg-white dark:bg-[#0a0a0a] border-b border-gray-100 dark:border-[#1e1e1e] transition-colors duration-300">
       <div className="max-w-[1200px] mx-auto px-4">
         <div className="flex items-center justify-between h-[52px]">
           {/* Logo */}
@@ -29,25 +49,26 @@ export default function SiteHeader() {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-5 ml-8">
-            <Link href="/" className="text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white transition-colors">
-              Recommend
-            </Link>
-            <Link href="/?type_slug=manhwa" className="text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white transition-colors">
-              Manhwa
-            </Link>
-            <Link href="/?type_slug=manhua" className="text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white transition-colors">
-              Manhua
-            </Link>
-            <Link href="/?type_slug=manga" className="text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white transition-colors">
-              Manga
-            </Link>
+            {[
+              { label: "Recommend", href: "/" },
+              { label: "Manhwa", href: "/?type_slug=manhwa" },
+              { label: "Manhua", href: "/?type_slug=manhua" },
+              { label: "Manga", href: "/?type_slug=manga" },
+            ].map(({ label, href }) => (
+              <Link
+                key={label}
+                href={href}
+                className="text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white transition-colors"
+              >
+                {label}
+              </Link>
+            ))}
           </nav>
 
-          {/* Spacer */}
           <div className="flex-1" />
 
           {/* Search bar (desktop) */}
-          <div className="hidden md:flex items-center gap-1 bg-[#f5f5f5] dark:bg-[#1a1a1a] rounded-full px-3 py-1.5 mr-2 w-[180px]">
+          <div className="hidden md:flex items-center gap-1 bg-[#f5f5f5] dark:bg-[#1a1a1a] rounded-full px-3 py-1.5 mr-2 w-[180px] transition-colors">
             <Search className="w-3.5 h-3.5 text-gray-400 shrink-0" />
             <input
               type="text"
@@ -74,7 +95,7 @@ export default function SiteHeader() {
               aria-label="Toggle theme"
             >
               {isDark ? (
-                <Sun className="w-4 h-4 text-yellow-400" />
+                <Sun className="w-4 h-4 text-[#E50914]" />
               ) : (
                 <Moon className="w-4 h-4 text-[#555]" />
               )}
@@ -113,7 +134,7 @@ export default function SiteHeader() {
 
       {/* Mobile menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#0a0a0a]">
+        <div className="md:hidden border-t border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#0a0a0a] transition-colors">
           <nav className="flex flex-col px-4 py-2">
             {[
               { label: "Recommend", href: "/" },
