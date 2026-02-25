@@ -346,6 +346,47 @@ export async function adminDeleteUser(userId: number): Promise<unknown> {
   });
 }
 
+// GET /admin/users/{user_id}
+export async function fetchAdminUserDetail(userId: number): Promise<AdminUser> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/users/${userId}`
+  ) as Promise<AdminUser>;
+}
+
+// PATCH /admin/users/{user_id}/username
+export async function adminUpdateUsername(
+  userId: number,
+  newUsername: string
+): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/users/${userId}/username`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_username: newUsername }),
+  });
+}
+
+// PATCH /admin/users/{user_id}/password
+export async function adminUpdatePassword(
+  userId: number,
+  newPassword: string
+): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/users/${userId}/password`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+}
+
+// PATCH /admin/users/{user_id}/email
+export async function adminUpdateEmail(
+  userId: number,
+  newEmail: string
+): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/users/${userId}/email`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_email: newEmail }),
+  });
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MANGA
 // ─────────────────────────────────────────────────────────────────────────────
@@ -585,6 +626,162 @@ export async function adminDeleteChapter(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CHAPTER PAGE MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ChapterPage {
+  id: number;
+  page_order: number;
+  proxy_url: string;
+  gdrive_file_id?: string;
+  is_anchor?: boolean;
+}
+
+export interface ChapterWithPages {
+  id: number;
+  chapter_label: string;
+  slug: string;
+  total_pages: number;
+  manga: { id: number; title: string; slug: string };
+  pages: ChapterPage[];
+}
+
+export interface AddPagesResult {
+  success: boolean;
+  chapter_id: number;
+  chapter_label: string;
+  pages_added: number;
+  total_pages_before: number;
+  total_pages_after: number;
+  message: string;
+}
+
+export interface DeletePageResult {
+  success: boolean;
+  chapter_id: number;
+  deleted_page_id: number;
+  deleted_page_order: number;
+  total_pages_before: number;
+  total_pages_after: number;
+  message: string;
+}
+
+export interface SwapPagesResult {
+  success: boolean;
+  chapter_id: number;
+  chapter_label: string;
+  message: string;
+}
+
+export interface ReorderPagesResult {
+  success: boolean;
+  chapter_id: number;
+  chapter_label: string;
+  total_pages_reordered: number;
+  message: string;
+}
+
+// GET /admin/chapter/{chapter_id} — admin endpoint, dengan pages + proxy_url
+export async function fetchAdminChapterDetail(chapterId: number): Promise<ChapterWithPages & {
+  manga_id: number;
+  chapter_main: number;
+  chapter_sub: number;
+  slug: string;
+  chapter_folder_name?: string;
+  volume_number?: number;
+  anchor_path?: string | null;
+  preview_url?: string | null;
+  uploaded_by?: string | null;
+  created_at?: string;
+}> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/chapter/${chapterId}`
+  ) as ReturnType<typeof fetchAdminChapterDetail>;
+}
+
+// GET /chapter/{chapter_slug} — public endpoint, pakai API_BASE_URL tanpa /admin
+export async function fetchChapterWithPages(chapterSlug: string): Promise<ChapterWithPages> {
+  const res = await fetch(`${API_BASE_URL}/chapter/${chapterSlug}`, {
+    headers: authHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as Record<string, string>)?.detail || `API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+// POST /admin/chapter/{chapter_id}/pages/add — multipart/form-data
+export async function adminAddChapterPages(
+  chapterId: number,
+  files: File[],
+  insertAfter?: number
+): Promise<AddPagesResult> {
+  const token = getToken();
+  if (!token) throw new Error("Akses ditolak.");
+  const fd = new FormData();
+  files.forEach((f) => fd.append("files", f));
+  const url = insertAfter !== undefined
+    ? `${API_BASE_URL}/admin/chapter/${chapterId}/pages/add?insert_after=${insertAfter}`
+    : `${API_BASE_URL}/admin/chapter/${chapterId}/pages/add`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  if (res.status === 401 || res.status === 403) throw new Error("Akses ditolak.");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as Record<string, string>)?.detail || "Upload gagal");
+  }
+  return res.json();
+}
+
+// DELETE /admin/chapter/{chapter_id}/pages/{page_id}
+export async function adminDeleteChapterPage(
+  chapterId: number,
+  pageId: number,
+  deleteFromGdrive = true,
+  renumber = true
+): Promise<DeletePageResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/chapter/${chapterId}/pages/${pageId}?delete_from_gdrive=${deleteFromGdrive}&renumber=${renumber}`,
+    { method: "DELETE" }
+  ) as Promise<DeletePageResult>;
+}
+
+// POST /admin/chapter/{chapter_id}/pages/swap
+export async function adminSwapChapterPages(
+  chapterId: number,
+  pageId1: number,
+  pageId2: number
+): Promise<SwapPagesResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/chapter/${chapterId}/pages/swap`,
+    {
+      method: "POST",
+      body: JSON.stringify({ page_id_1: pageId1, page_id_2: pageId2 }),
+    }
+  ) as Promise<SwapPagesResult>;
+}
+
+// PUT /admin/chapter/{chapter_id}/pages/reorder
+export async function adminReorderChapterPages(
+  chapterId: number,
+  pageOrders: Array<{ page_id: number; new_order: number }>
+): Promise<ReorderPagesResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/chapter/${chapterId}/pages/reorder`,
+    {
+      method: "PUT",
+      body: JSON.stringify({ page_orders: pageOrders }),
+    }
+  ) as Promise<ReorderPagesResult>;
+}
+
+
+
+// ─────────────────────────────────────────────────────────────────────────────
 // CHAPTER THUMBNAILS
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -779,4 +976,241 @@ export async function adminResetRemoteHealth(
     `${API_BASE_URL}/admin/remotes/${encodeURIComponent(remoteName)}/reset?group=${group}`,
     { method: "POST" }
   );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYTICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface AnalyticsOverview {
+  database: {
+    total_users: number;
+    active_users_today: number;
+    active_users_week: number;
+    total_manga: number;
+    manga_ongoing: number;
+    manga_completed: number;
+    total_chapters: number;
+  };
+  views: {
+    total_manga_views: number;
+    total_chapter_views: number;
+    views_today: number;
+    views_week: number;
+    views_month: number;
+  };
+  engagement: {
+    total_bookmarks: number;
+    total_reading_lists: number;
+  };
+  popular_genres: Array<{
+    name: string;
+    slug: string;
+    manga_count: number;
+  }>;
+  user_growth: {
+    labels: string[];
+    data: number[];
+  };
+  timestamp: string;
+}
+
+export interface MangaViewItem {
+  manga_id: number;
+  manga_title: string;
+  manga_slug: string;
+  total_views: number;
+  views_today: number;
+  views_week: number;
+  views_month: number;
+  unique_viewers: number;
+}
+
+export interface MangaViewsResponse {
+  items: MangaViewItem[];
+  pagination: {
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+  };
+  period: string;
+}
+
+export interface UserGrowthEntry {
+  date: string;
+  new_users: number;
+  total_users: number;
+}
+
+export interface UserGrowthResponse {
+  period_days: number;
+  total_new_users: number;
+  data: UserGrowthEntry[];
+}
+
+export interface PopularGenreItem {
+  id: number;
+  name: string;
+  slug: string;
+  manga_count: number;
+  total_views: number;
+  bookmarks: number;
+}
+
+export interface PopularGenresResponse {
+  genres: PopularGenreItem[];
+  total_genres: number;
+}
+
+export interface TopMangaItem {
+  rank: number;
+  manga_id: number;
+  manga_title: string;
+  manga_slug: string;
+  views?: number;
+  bookmarks?: number;
+  in_reading_lists?: number;
+}
+
+export interface TopMangaResponse {
+  metric: string;
+  period: string;
+  items: TopMangaItem[];
+}
+
+export interface RecentActivityItem {
+  type: "view" | "bookmark";
+  username: string;
+  manga_title: string;
+  timestamp: string;
+}
+
+export interface RecentActivityResponse {
+  recent_activity: RecentActivityItem[];
+}
+
+// GET /admin/analytics/overview
+export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/overview`
+  ) as Promise<AnalyticsOverview>;
+}
+
+// GET /admin/analytics/manga-views
+export async function fetchMangaViews(params?: {
+  page?: number;
+  page_size?: number;
+  period?: "today" | "week" | "month" | "year" | "all";
+  sort_by?: "total_views" | "title";
+}): Promise<MangaViewsResponse> {
+  const sp = new URLSearchParams();
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.page_size) sp.set("page_size", String(params.page_size));
+  if (params?.period) sp.set("period", params.period);
+  if (params?.sort_by) sp.set("sort_by", params.sort_by);
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/manga-views?${sp}`
+  ) as Promise<MangaViewsResponse>;
+}
+
+// GET /admin/analytics/user-growth
+export async function fetchUserGrowth(days = 30): Promise<UserGrowthResponse> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/user-growth?days=${days}`
+  ) as Promise<UserGrowthResponse>;
+}
+
+// GET /admin/analytics/popular-genres
+export async function fetchPopularGenres(limit = 10): Promise<PopularGenresResponse> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/popular-genres?limit=${limit}`
+  ) as Promise<PopularGenresResponse>;
+}
+
+// GET /admin/analytics/top-manga
+export async function fetchTopManga(params?: {
+  metric?: "views" | "bookmarks" | "reading_lists";
+  period?: "today" | "week" | "month" | "all";
+  limit?: number;
+}): Promise<TopMangaResponse> {
+  const sp = new URLSearchParams();
+  if (params?.metric) sp.set("metric", params.metric);
+  if (params?.period) sp.set("period", params.period);
+  if (params?.limit) sp.set("limit", String(params.limit));
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/top-manga?${sp}`
+  ) as Promise<TopMangaResponse>;
+}
+
+// GET /admin/analytics/recent-activity
+export async function fetchRecentActivity(limit = 50): Promise<RecentActivityResponse> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/recent-activity?limit=${limit}`
+  ) as Promise<RecentActivityResponse>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VIEWS CLEANUP
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ViewsDeleteResult {
+  success: boolean;
+  deleted_count: number;
+  message: string;
+  cutoff_date?: string;
+  manga_id?: number;
+  manga_title?: string;
+  manga_slug?: string;
+  chapter_id?: number;
+  chapter_label?: string;
+  chapter_slug?: string;
+}
+
+// DELETE /admin/analytics/manga-views?older_than_days=N
+export async function deleteMangaViewsByPeriod(olderThanDays = 30): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/manga-views?older_than_days=${olderThanDays}`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
+}
+
+// DELETE /admin/analytics/manga-views/manga/{manga_id}
+export async function deleteMangaViewsByManga(mangaId: number): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/manga-views/manga/${mangaId}`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
+}
+
+// DELETE /admin/analytics/manga-views/all?confirm=true
+export async function deleteAllMangaViews(): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/manga-views/all?confirm=true`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
+}
+
+// DELETE /admin/analytics/chapter-views?older_than_days=N
+export async function deleteChapterViewsByPeriod(olderThanDays = 30): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/chapter-views?older_than_days=${olderThanDays}`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
+}
+
+// DELETE /admin/analytics/chapter-views/chapter/{chapter_id}
+export async function deleteChapterViewsByChapter(chapterId: number): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/chapter-views/chapter/${chapterId}`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
+}
+
+// DELETE /admin/analytics/chapter-views/all?confirm=true
+export async function deleteAllChapterViews(): Promise<ViewsDeleteResult> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/analytics/chapter-views/all?confirm=true`,
+    { method: "DELETE" }
+  ) as Promise<ViewsDeleteResult>;
 }

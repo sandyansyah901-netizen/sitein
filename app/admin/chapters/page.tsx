@@ -2,10 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   fetchAdminChapters, adminDeleteChapter, adminGenerateThumbnail,
   adminDeleteThumbnail, fetchThumbnailInfo, type AdminChapter,
 } from "@/app/lib/admin-api";
+
 
 // ── Mode filter: bisa by ID atau by judul/slug ──────────────────────────────
 type FilterMode = "id" | "title";
@@ -14,24 +16,24 @@ export default function AdminChaptersPage() {
   const searchParams = useSearchParams();
   const initMangaId = searchParams.get("manga_id") ?? "";
 
-  const [chapters, setChapters]     = useState<AdminChapter[]>([]);
-  const [total, setTotal]           = useState(0);
-  const [page, setPage]             = useState(1);
+  const [chapters, setChapters] = useState<AdminChapter[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
   // ── Filter state ───────────────────────────────────────────────────────────
-  const [filterMode, setFilterMode]         = useState<FilterMode>("id");
-  const [mangaId, setMangaId]               = useState(initMangaId);
-  const [mangaIdInput, setMangaIdInput]     = useState(initMangaId);
-  const [mangaSearch, setMangaSearch]       = useState("");
+  const [filterMode, setFilterMode] = useState<FilterMode>("id");
+  const [mangaId, setMangaId] = useState(initMangaId);
+  const [mangaIdInput, setMangaIdInput] = useState(initMangaId);
+  const [mangaSearch, setMangaSearch] = useState("");
   const [mangaSearchInput, setMangaSearchInput] = useState("");
 
-  const [isLoading, setIsLoading]   = useState(true);
-  const [error, setError]           = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [thumbInfo, setThumbInfo]   = useState<Record<number, unknown>>({});
+  const [thumbInfo, setThumbInfo] = useState<Record<number, unknown>>({});
   const [generatingId, setGeneratingId] = useState<number | null>(null);
-  const [msgs, setMsgs]             = useState<{ type: "ok" | "err"; text: string }[]>([]);
+  const [msgs, setMsgs] = useState<{ type: "ok" | "err"; text: string }[]>([]);
 
   const addMsg = (type: "ok" | "err", text: string) =>
     setMsgs((p) => [{ type, text }, ...p].slice(0, 5));
@@ -41,7 +43,7 @@ export default function AdminChaptersPage() {
     try {
       const data = await fetchAdminChapters({
         // Filter by ID jika mode "id" dan ada input
-        manga_id:   filterMode === "id" && mangaId ? Number(mangaId) : undefined,
+        manga_id: filterMode === "id" && mangaId ? Number(mangaId) : undefined,
         // Filter by judul/slug jika mode "title" dan ada input
         manga_slug: filterMode === "title" && mangaSearch ? mangaSearch : undefined,
         page, page_size: 20,
@@ -118,21 +120,19 @@ export default function AdminChaptersPage() {
         <div className="flex rounded-lg border border-border overflow-hidden text-sm">
           <button
             onClick={() => { setFilterMode("id"); handleReset(); }}
-            className={`px-3 py-2 font-semibold transition-colors ${
-              filterMode === "id"
-                ? "bg-accent text-white"
-                : "bg-card-bg text-muted hover:text-foreground"
-            }`}
+            className={`px-3 py-2 font-semibold transition-colors ${filterMode === "id"
+              ? "bg-accent text-white"
+              : "bg-card-bg text-muted hover:text-foreground"
+              }`}
           >
             By ID
           </button>
           <button
             onClick={() => { setFilterMode("title"); handleReset(); }}
-            className={`px-3 py-2 font-semibold transition-colors ${
-              filterMode === "title"
-                ? "bg-accent text-white"
-                : "bg-card-bg text-muted hover:text-foreground"
-            }`}
+            className={`px-3 py-2 font-semibold transition-colors ${filterMode === "title"
+              ? "bg-accent text-white"
+              : "bg-card-bg text-muted hover:text-foreground"
+              }`}
           >
             By Judul / Slug
           </button>
@@ -208,11 +208,10 @@ export default function AdminChaptersPage() {
       {msgs.length > 0 && (
         <div className="mb-4 space-y-2">
           {msgs.map((m, i) => (
-            <div key={i} className={`rounded-lg px-4 py-2.5 text-sm ${
-              m.type === "ok"
-                ? "border border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
-                : "border border-red-800/40 bg-red-900/20 text-red-400"
-            }`}>
+            <div key={i} className={`rounded-lg px-4 py-2.5 text-sm ${m.type === "ok"
+              ? "border border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
+              : "border border-red-800/40 bg-red-900/20 text-red-400"
+              }`}>
               {m.text}
             </div>
           ))}
@@ -269,6 +268,16 @@ export default function AdminChaptersPage() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1">
+                          {/* Edit Pages */}
+                          <Link
+                            href={`/admin/chapters/${ch.id}/edit`}
+                            title="Edit Halaman Chapter"
+                            className="rounded-lg p-1.5 text-muted hover:bg-border hover:text-accent transition-colors"
+                          >
+                            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </Link>
                           <button onClick={() => handleGenerateThumb(ch)} disabled={generatingId === ch.id}
                             title="Generate Thumbnail" className="rounded-lg p-1.5 text-muted hover:bg-border hover:text-yellow-400 disabled:opacity-50">
                             {generatingId === ch.id

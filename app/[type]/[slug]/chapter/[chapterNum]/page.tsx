@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import ChapterImage from "@/app/components/ChapterImage";
@@ -14,6 +14,8 @@ import {
   type Manga,
   type Chapter,
 } from "@/app/lib/api";
+import { saveReadingProgress } from "@/app/lib/user-api";
+import { useAuth } from "@/app/lib/auth";
 
 interface PageProps {
   params: Promise<{
@@ -35,6 +37,19 @@ export default function ChapterReaderPage({ params }: PageProps) {
   const [sessionStart] = useState(Date.now());
   const [apiLoadTime, setApiLoadTime] = useState(0);
   const [loadedCount, setLoadedCount] = useState(0);
+  const { token, isLoggedIn } = useAuth();
+  const lastSavedPage = useRef(0);
+
+  // Save reading progress (fire-and-forget)
+  const saveProgress = useCallback(
+    (chSlug: string, mangaSlug: string, pageNum: number) => {
+      if (!token || !isLoggedIn) return;
+      if (pageNum <= lastSavedPage.current) return;
+      lastSavedPage.current = pageNum;
+      saveReadingProgress(token, mangaSlug, chSlug, pageNum);
+    },
+    [token, isLoggedIn]
+  );
 
   // Scroll to top on mount and when chapter changes
   useEffect(() => {
@@ -87,7 +102,14 @@ export default function ChapterReaderPage({ params }: PageProps) {
       setChapterDetail(chapter);
       setMangaDetail(manga);
       setAllChapters(chapterList?.chapters || []);
-      setLoadedCount(0); // Reset loaded count
+      setLoadedCount(0);
+      lastSavedPage.current = 0;
+
+      // Save page 1 immediately on chapter open
+      if (token && isLoggedIn) {
+        saveReadingProgress(token, manga.slug, chapter.slug, 1);
+        lastSavedPage.current = 1;
+      }
 
       console.log("🖼️  IMAGE LOADING STARTED (PARALLEL MODE)");
       console.log(`   Total images: ${chapter.pages.length}`);
@@ -95,6 +117,37 @@ export default function ChapterReaderPage({ params }: PageProps) {
       console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     });
   }, [resolvedParams]);
+
+  // IntersectionObserver: track halaman mana yang sedang dilihat user
+  useEffect(() => {
+    if (!chapterDetail || !mangaDetail) return;
+    if (!token || !isLoggedIn) return;
+
+    const chSlug = chapterDetail.slug;
+    const mangaSlug = mangaDetail.slug;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const pageNum = parseInt(
+              (entry.target as HTMLElement).dataset.page ?? "0",
+              10
+            );
+            if (pageNum > 0) {
+              saveProgress(chSlug, mangaSlug, pageNum);
+            }
+          }
+        });
+      },
+      { threshold: 0.5 } // halaman minimal 50% visible baru save
+    );
+
+    const els = document.querySelectorAll("[data-page]");
+    els.forEach((el) => observer.observe(el));
+
+    return () => observer.disconnect();
+  }, [chapterDetail, mangaDetail, token, isLoggedIn, saveProgress]);
 
   // Track image loading progress
   const handleImageLoaded = () => {
@@ -160,7 +213,7 @@ export default function ChapterReaderPage({ params }: PageProps) {
   }
 
   return (
-    <main className="min-h-screen bg-background">
+    <main className="min-h-screen bg-background chapter-reader">
       {/* Reader Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-sm">
         <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
@@ -238,74 +291,74 @@ export default function ChapterReaderPage({ params }: PageProps) {
         </div>
       )}
 
-      {/* Reader Content */}
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        <div className="mb-6 text-center">
-          <h1 className="mb-2 text-2xl font-bold text-foreground">
-            {chapterDetail.manga.title}
-          </h1>
-          <p className="text-sm text-muted">{chapterDetail.chapter_label}</p>
-          <p className="mt-1 text-xs text-muted">
-            {chapterDetail.total_pages} halaman • Upload:{" "}
-            {new Date(chapterDetail.created_at).toLocaleDateString("id-ID")}
-          </p>
-        </div>
+      {/* Judul chapter — tetap ada padding */}
+      <div className="mx-auto max-w-4xl px-4 pt-8 pb-4 text-center">
+        <h1 className="mb-2 text-2xl font-bold text-foreground">
+          {chapterDetail.manga.title}
+        </h1>
+        <p className="text-sm text-muted">{chapterDetail.chapter_label}</p>
+        <p className="mt-1 text-xs text-muted">
+          {chapterDetail.total_pages} halaman • Upload:{" "}
+          {new Date(chapterDetail.created_at).toLocaleDateString("id-ID")}
+        </p>
+      </div>
 
-        {/* Pages - Load ALL at once (no queue) */}
-        <div className="space-y-1">
-          {chapterDetail.pages.map((page) => (
+      {/* Pages — FULL WIDTH, tanpa padding kiri-kanan */}
+      {/* Setiap page dibungkus div dengan data-page untuk IntersectionObserver */}
+      <div className="flex flex-col w-full max-w-[800px] mx-auto" id="chapter-pages">
+        {chapterDetail.pages.map((page) => (
+          <div key={page.id} data-page={page.page_order}>
             <ChapterImage
-              key={page.id}
               imageUrl={`http://127.0.0.1:8000${page.proxy_url}`}
               pageOrder={page.page_order}
               totalPages={chapterDetail.total_pages}
               isAnchor={page.is_anchor}
               onLoadComplete={handleImageLoaded}
             />
-          ))}
-        </div>
+          </div>
+        ))}
+      </div>
 
-        {/* Navigation Bottom */}
-        <div className="mt-8 flex flex-wrap justify-center gap-4">
-          {prevChapter ? (
-            <Link
-              href={getChapterUrl(prevChapter)}
-              className="rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-            >
-              ← {prevChapter.chapter_label}
-            </Link>
-          ) : (
-            <button
-              disabled
-              className="cursor-not-allowed rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-muted/50"
-            >
-              ← Previous Chapter
-            </button>
-          )}
-
+      {/* Navigation Bottom */}
+      <div className="mt-8 flex flex-wrap justify-center gap-4 px-4 pb-8">
+        {prevChapter ? (
           <Link
-            href={`/${type}/${slug}`}
-            className="rounded-lg bg-accent px-6 py-3 font-semibold text-white transition-colors hover:bg-accent-hover"
+            href={getChapterUrl(prevChapter)}
+            className="rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
           >
-            Daftar Chapter
+            ← {prevChapter.chapter_label}
           </Link>
+        ) : (
+          <button
+            disabled
+            className="cursor-not-allowed rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-muted/50"
+          >
+            ← Previous Chapter
+          </button>
+        )}
 
-          {nextChapter ? (
-            <Link
-              href={getChapterUrl(nextChapter)}
-              className="rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
-            >
-              {nextChapter.chapter_label} →
-            </Link>
-          ) : (
-            <button
-              disabled
-              className="cursor-not-allowed rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-muted/50"
-            >
-              Next Chapter →
-            </button>
-          )}
-        </div>
+        <Link
+          href={`/${type}/${slug}`}
+          className="rounded-lg bg-accent px-6 py-3 font-semibold text-white transition-colors hover:bg-accent-hover"
+        >
+          Daftar Chapter
+        </Link>
+
+        {nextChapter ? (
+          <Link
+            href={getChapterUrl(nextChapter)}
+            className="rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-foreground transition-colors hover:border-accent hover:text-accent"
+          >
+            {nextChapter.chapter_label} →
+          </Link>
+        ) : (
+          <button
+            disabled
+            className="cursor-not-allowed rounded-lg border border-border bg-card-bg px-6 py-3 font-semibold text-muted/50"
+          >
+            Next Chapter →
+          </button>
+        )}
       </div>
     </main>
   );

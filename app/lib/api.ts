@@ -50,6 +50,13 @@ export interface Manga {
   }>;
   total_chapters?: number;
   latest_chapter?: string | null;
+  latest_chapters?: Array<{
+    label: string;
+    slug: string;
+    chapter_main: number;
+    chapter_sub: number;
+    created_at: string;
+  }>;
   updated_at?: string;
   created_at?: string;
   alt_titles?: string[];

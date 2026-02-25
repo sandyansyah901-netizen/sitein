@@ -13,7 +13,7 @@ import {
   ChevronUp,
 } from "lucide-react";
 import type { Manga, Chapter } from "@/app/lib/api";
-import { addBookmark, removeBookmark, checkBookmark } from "@/app/lib/user-api";
+import { addBookmark, removeBookmark, checkBookmark, addToReadingList } from "@/app/lib/user-api";
 import { useAuth } from "@/app/lib/auth";
 
 interface Props {
@@ -186,6 +186,8 @@ export default function ComicDetailClient({
                 } else {
                   await addBookmark(token, manga.slug);
                   setBookmarked(true);
+                  // Otomatis masuk reading list sebagai plan_to_read
+                  addToReadingList(token, manga.slug, "plan_to_read").catch(() => { });
                 }
               } catch {
                 /* silent */
