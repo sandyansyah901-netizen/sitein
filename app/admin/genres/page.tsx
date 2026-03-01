@@ -7,12 +7,7 @@ import {
 } from "@/app/lib/admin-api";
 import { fetchGenres, type Genre } from "@/app/lib/api";
 
-function slugify(text: string) {
-  return text
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9-]/g, "");
-}
+import { normalizeSlug } from "@/app/lib/utils";
 
 export default function AdminGenresPage() {
   const [genres, setGenres] = useState<Genre[]>([]);
@@ -35,7 +30,7 @@ export default function AdminGenresPage() {
 
   const handleNameChange = (v: string) => {
     setName(v);
-    setSlug(slugify(v));
+    setSlug(normalizeSlug(v));
   };
 
   const handleCreate = async (e: React.FormEvent) => {

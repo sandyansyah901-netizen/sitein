@@ -20,42 +20,40 @@ import {
   type MangaType,
 } from "@/app/lib/api";
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
+import { normalizeSlug } from "@/app/lib/utils";
 
 export default function EditMangaPage() {
   const { id } = useParams<{ id: string }>();
-  const router  = useRouter();
+  const router = useRouter();
 
   // ── Data ──────────────────────────────────────────────────────
-  const [manga, setManga]         = useState<AdminManga | null>(null);
-  const [genres, setGenres]       = useState<Genre[]>([]);
-  const [types, setTypes]         = useState<MangaType[]>([]);
+  const [manga, setManga] = useState<AdminManga | null>(null);
+  const [genres, setGenres] = useState<Genre[]>([]);
+  const [types, setTypes] = useState<MangaType[]>([]);
   const [coverInfo, setCoverInfo] = useState<CoverInfo | null>(null);
 
   // ── Form state ────────────────────────────────────────────────
-  const [title, setTitle]             = useState("");
-  const [slug, setSlug]               = useState("");
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
-  const [typeSlug, setTypeSlug]       = useState("");
-  const [status, setStatus]           = useState("ongoing");
+  const [typeSlug, setTypeSlug] = useState("");
+  const [status, setStatus] = useState("ongoing");
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   // ── Cover state ───────────────────────────────────────────────
-  const [coverFile, setCoverFile]               = useState<File | null>(null);
-  const [coverPreview, setCoverPreview]         = useState<string | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
-  const [isDeletingCover, setIsDeletingCover]   = useState(false);
+  const [isDeletingCover, setIsDeletingCover] = useState(false);
   const [isLoadingCoverInfo, setIsLoadingCoverInfo] = useState(false);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
   // ── UI state ──────────────────────────────────────────────────
-  const [isLoading, setIsLoading]       = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError]               = useState("");
-  const [success, setSuccess]           = useState("");
-  const [coverMsg, setCoverMsg]         = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [coverMsg, setCoverMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   // ── Load ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -110,7 +108,7 @@ export default function EditMangaPage() {
       });
       setManga(m);
       await loadCoverInfo(Number(id));
-    } catch {}
+    } catch { }
   };
 
   // ── Cover file preview ────────────────────────────────────────
@@ -291,7 +289,7 @@ export default function EditMangaPage() {
               type="text" value={title}
               onChange={(e) => {
                 setTitle(e.target.value);
-                if (slug === slugify(manga.title)) setSlug(slugify(e.target.value));
+                if (slug === normalizeSlug(manga.title)) setSlug(normalizeSlug(e.target.value));
               }}
               placeholder="contoh: One Piece"
               required maxLength={255}
@@ -392,11 +390,10 @@ export default function EditMangaPage() {
                   <button
                     key={g.id} type="button"
                     onClick={() => toggleGenre(g.slug)}
-                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                      selectedGenres.includes(g.slug)
-                        ? "border-accent bg-accent/10 text-accent"
-                        : "border-border text-muted hover:border-accent/50 hover:text-foreground"
-                    }`}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${selectedGenres.includes(g.slug)
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-muted hover:border-accent/50 hover:text-foreground"
+                      }`}
                   >
                     {selectedGenres.includes(g.slug) ? "✓ " : ""}{g.name}
                   </button>
@@ -563,11 +560,10 @@ export default function EditMangaPage() {
 
             {/* Cover alert */}
             {coverMsg && (
-              <div className={`mb-3 rounded-lg px-3 py-2.5 text-xs ${
-                coverMsg.type === "ok"
-                  ? "border border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
-                  : "border border-red-800/40 bg-red-900/20 text-red-400"
-              }`}>
+              <div className={`mb-3 rounded-lg px-3 py-2.5 text-xs ${coverMsg.type === "ok"
+                ? "border border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
+                : "border border-red-800/40 bg-red-900/20 text-red-400"
+                }`}>
                 {coverMsg.text}
               </div>
             )}

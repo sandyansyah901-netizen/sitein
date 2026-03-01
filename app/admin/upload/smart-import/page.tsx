@@ -22,6 +22,30 @@ interface ProgressEntry {
   startedAt: number;
 }
 
+// Dry run preview item shape (dari docs v3)
+interface DryRunItem {
+  title: string;
+  slug: string;
+  exists: boolean;
+  has_cover: boolean;
+  cover_format?: string;
+  has_description: boolean;
+  genres: string[];
+  alt_titles: { title: string; lang: string }[];
+  detected_type?: string;
+  type_source?: string;
+  detected_status?: string;
+  status_from_file?: boolean;
+  total_chapters: number;
+  chapters: { chapter_label: string; file_count: number; has_preview: boolean }[];
+}
+
+interface DryRunResult {
+  dry_run: boolean;
+  total_manga: number;
+  preview: DryRunItem[];
+}
+
 export default function SmartImportPage() {
   const router = useRouter();
 
@@ -32,6 +56,9 @@ export default function SmartImportPage() {
   const [dryRun, setDryRun] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Dry run preview result ───────────────────────────────────
+  const [dryRunResult, setDryRunResult] = useState<DryRunResult | null>(null);
 
   // ── Progress list (kanan) ────────────────────────────────────
   const [progresses, setProgresses] = useState<ProgressEntry[]>([]);
@@ -44,7 +71,7 @@ export default function SmartImportPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchMangaTypes().then(setTypes).catch(() => {});
+    fetchMangaTypes().then(setTypes).catch(() => { });
   }, []);
 
   // Cleanup all pollers on unmount
@@ -56,7 +83,6 @@ export default function SmartImportPage() {
 
   // ── Poll progress for one upload_id ─────────────────────────
   const startPolling = useCallback((upload_id: string) => {
-    // Jangan polling dua kali untuk id yg sama
     if (pollingRefs.current[upload_id]) return;
 
     const interval = setInterval(async () => {
@@ -67,14 +93,14 @@ export default function SmartImportPage() {
           prev.map((p) =>
             p.upload_id === upload_id
               ? {
-                  ...p,
-                  status: data.status,
-                  progress: data.progress,
-                  current_file: data.current_file,
-                  total_files: data.total_files,
-                  processed_files: data.processed_files,
-                  errors: data.errors,
-                }
+                ...p,
+                status: data.status,
+                progress: data.progress,
+                current_file: data.current_file,
+                total_files: data.total_files,
+                processed_files: data.processed_files,
+                errors: data.errors,
+              }
               : p
           )
         );
@@ -89,7 +115,6 @@ export default function SmartImportPage() {
           delete pollingRefs.current[upload_id];
         }
       } catch {
-        // Jika gagal fetch progress, hentikan polling
         clearInterval(interval);
         delete pollingRefs.current[upload_id];
         setProgresses((prev) =>
@@ -100,7 +125,7 @@ export default function SmartImportPage() {
           )
         );
       }
-    }, 1500); // poll tiap 1.5 detik
+    }, 1500);
 
     pollingRefs.current[upload_id] = interval;
   }, []);
@@ -111,7 +136,7 @@ export default function SmartImportPage() {
       try {
         const ex = await fetchSmartImportExample();
         setExampleJson(JSON.stringify(ex, null, 2));
-      } catch {}
+      } catch { }
     }
     setShowExample((v) => !v);
   };
@@ -124,22 +149,24 @@ export default function SmartImportPage() {
       return;
     }
     setError("");
+    setDryRunResult(null);
     setIsUploading(true);
 
-    // Catat entry progress dengan status "uploading"
     const tempId = `temp-${Date.now()}`;
     const filename = zipFile.name;
 
-    setProgresses((prev) => [
-      {
-        upload_id: tempId,
-        filename,
-        status: "uploading",
-        progress: 0,
-        startedAt: Date.now(),
-      },
-      ...prev,
-    ]);
+    if (!dryRun) {
+      setProgresses((prev) => [
+        {
+          upload_id: tempId,
+          filename,
+          status: "uploading",
+          progress: 0,
+          startedAt: Date.now(),
+        },
+        ...prev,
+      ]);
+    }
 
     // ✅ Reset form SEGERA supaya user bisa upload lagi
     setZipFile(null);
@@ -155,32 +182,43 @@ export default function SmartImportPage() {
         dry_run: dryRun,
       }) as Record<string, unknown>;
 
-      // Coba ambil upload_id dari response
+      // ── Dry run: tampilkan preview ─────────────────────────
+      if (dryRun) {
+        if (res?.dry_run === true && res?.preview) {
+          setDryRunResult(res as unknown as DryRunResult);
+        } else {
+          setDryRunResult({
+            dry_run: true,
+            total_manga: 0,
+            preview: [],
+          });
+        }
+        return;
+      }
+
+      // ── Actual import: progress tracking ──────────────────
       const upload_id =
         (res?.upload_id as string) ||
         (res?.id as string) ||
         tempId;
 
-      // Update entry: ganti tempId → upload_id yg asli
       setProgresses((prev) =>
         prev.map((p) =>
           p.upload_id === tempId
             ? {
-                ...p,
-                upload_id,
-                status: (res?.status as string) ?? "processing",
-                progress: (res?.progress as number) ?? 10,
-                result: res,
-              }
+              ...p,
+              upload_id,
+              status: (res?.status as string) ?? "processing",
+              progress: (res?.progress as number) ?? 10,
+              result: res,
+            }
             : p
         )
       );
 
-      // Mulai polling jika upload_id tersedia
       if (upload_id && upload_id !== tempId) {
         startPolling(upload_id);
       } else {
-        // Jika API langsung return hasil (sync), tandai selesai
         setProgresses((prev) =>
           prev.map((p) =>
             p.upload_id === tempId
@@ -191,13 +229,17 @@ export default function SmartImportPage() {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Import gagal";
-      setProgresses((prev) =>
-        prev.map((p) =>
-          p.upload_id === tempId
-            ? { ...p, status: "failed", errors: [msg], progress: 0 }
-            : p
-        )
-      );
+      if (dryRun) {
+        setError(msg);
+      } else {
+        setProgresses((prev) =>
+          prev.map((p) =>
+            p.upload_id === tempId
+              ? { ...p, status: "failed", errors: [msg], progress: 0 }
+              : p
+          )
+        );
+      }
     }
   };
 
@@ -230,19 +272,30 @@ export default function SmartImportPage() {
           </p>
         </div>
 
-        {/* Struktur ZIP */}
+        {/* Struktur ZIP — v3 */}
         <div className="mb-4 rounded-lg border border-border bg-card-bg p-4 text-xs font-mono text-muted">
-          <p className="mb-1 font-semibold text-foreground">Struktur ZIP:</p>
+          <p className="mb-1 font-semibold text-foreground">Struktur ZIP (v3):</p>
           <pre>{`upload.zip
 ├── One Piece/
-│   ├── cover.jpg
+│   ├── cover.webp
 │   ├── description.txt
 │   ├── genres.txt
-│   ├── Chapter_01/
-│   │   ├── 001.jpg
-│   │   └── 002.jpg
-│   └── Chapter_02/
-└── Naruto/`}</pre>
+│   ├── status.txt       ✨ (Ongoing/Completed/Hiatus/Cancelled)
+│   ├── type.txt         ✨ (Manga/Manhwa/Manhua/Novel/…)
+│   ├── alt_titles.txt   (judul|lang_code per baris)
+│   ├── Chapter 01/
+│   │   ├── page_001.webp
+│   │   └── preview.webp (optional thumbnail)
+│   └── Chapter 02/
+└── Tower of God/
+    ├── status.txt
+    ├── type.txt
+    └── Chapter 01/`}</pre>
+          <div className="mt-2 space-y-0.5 text-[10px] text-border">
+            <p>• <span className="text-accent">status.txt</span> → override "Status Default" di bawah (per manga)</p>
+            <p>• <span className="text-accent">type.txt</span> → override "Tipe Default" di bawah (per manga)</p>
+            <p>• <span className="text-accent">preview.webp</span> → thumbnail chapter (jika tidak ada, pakai halaman pertama)</p>
+          </div>
         </div>
 
         {/* Example toggle */}
@@ -312,7 +365,12 @@ export default function SmartImportPage() {
           {/* Type + Status */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">Tipe Default</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                Tipe Default
+              </label>
+              <p className="mb-1.5 text-[10px] text-muted">
+                Jika ZIP punya <code className="text-accent">type.txt</code>, itu yang dipakai
+              </p>
               <select
                 value={typeSlug}
                 onChange={(e) => setTypeSlug(e.target.value)}
@@ -325,7 +383,12 @@ export default function SmartImportPage() {
               </select>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">Status Default</label>
+              <label className="mb-1 block text-sm font-medium text-foreground">
+                Status Default
+              </label>
+              <p className="mb-1.5 text-[10px] text-muted">
+                Jika ZIP punya <code className="text-accent">status.txt</code>, itu yang dipakai
+              </p>
               <select
                 value={defaultStatus}
                 onChange={(e) => setDefaultStatus(e.target.value)}
@@ -333,6 +396,8 @@ export default function SmartImportPage() {
               >
                 <option value="ongoing">Ongoing</option>
                 <option value="completed">Completed</option>
+                <option value="hiatus">Hiatus</option>
+                <option value="cancelled">Cancelled</option>
               </select>
             </div>
           </div>
@@ -347,7 +412,7 @@ export default function SmartImportPage() {
             />
             <div>
               <span className="text-sm text-foreground">Dry Run</span>
-              <p className="text-xs text-muted">Preview tanpa upload</p>
+              <p className="text-xs text-muted">Preview manga yang akan diimport (tidak upload)</p>
             </div>
           </label>
 
@@ -373,57 +438,203 @@ export default function SmartImportPage() {
                   </svg>
                   Mengirim...
                 </span>
-              ) : dryRun ? "🔍 Dry Run" : "✨ Smart Import"}
+              ) : dryRun ? "🔍 Dry Run Preview" : "✨ Smart Import"}
             </button>
           </div>
         </form>
       </div>
 
-      {/* ── KANAN: Progress Panel ────────────────────────────────── */}
+      {/* ── KANAN: Progress / Dry Run Panel ──────────────────────── */}
       <div className="flex-1 min-w-0">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-foreground">
-            📋 Antrian Upload
-          </h2>
-          {progresses.length > 0 && (
-            <button
-              onClick={() => {
-                // Hapus semua yg sudah selesai/gagal
-                const toRemove = progresses.filter(
-                  (p) =>
-                    p.status === "completed" ||
-                    p.status === "failed" ||
-                    p.status === "error"
-                );
-                toRemove.forEach((p) => removeEntry(p.upload_id));
-              }}
-              className="text-xs text-muted hover:text-foreground"
-            >
-              Bersihkan selesai
-            </button>
-          )}
-        </div>
-
-        {progresses.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
-            <svg className="mb-3 h-10 w-10 text-border" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-            </svg>
-            <p className="text-sm text-muted">Belum ada upload</p>
-            <p className="mt-1 text-xs text-border">Upload ZIP untuk melihat progress di sini</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {progresses.map((entry) => (
-              <ProgressCard
-                key={entry.upload_id}
-                entry={entry}
-                onRemove={() => removeEntry(entry.upload_id)}
-              />
-            ))}
+        {/* ── Dry Run Result ──────────────────────────────────────── */}
+        {dryRunResult && (
+          <div className="mb-6">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">
+                🔍 Dry Run Preview
+              </h2>
+              <div className="flex items-center gap-3">
+                <span className="rounded-full bg-yellow-500/10 px-3 py-0.5 text-xs font-semibold text-yellow-400">
+                  {dryRunResult.total_manga} manga ditemukan
+                </span>
+                <button
+                  onClick={() => setDryRunResult(null)}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  Tutup
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {dryRunResult.preview.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted">
+                  Tidak ada manga ditemukan dalam ZIP
+                </div>
+              ) : (
+                dryRunResult.preview.map((item, i) => (
+                  <DryRunCard key={i} item={item} />
+                ))
+              )}
+            </div>
           </div>
         )}
+
+        {/* ── Upload Progress ─────────────────────────────────────── */}
+        {!dryRunResult && (
+          <>
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">
+                📋 Antrian Upload
+              </h2>
+              {progresses.length > 0 && (
+                <button
+                  onClick={() => {
+                    const toRemove = progresses.filter(
+                      (p) =>
+                        p.status === "completed" ||
+                        p.status === "failed" ||
+                        p.status === "error"
+                    );
+                    toRemove.forEach((p) => removeEntry(p.upload_id));
+                  }}
+                  className="text-xs text-muted hover:text-foreground"
+                >
+                  Bersihkan selesai
+                </button>
+              )}
+            </div>
+
+            {progresses.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-16 text-center">
+                <svg className="mb-3 h-10 w-10 text-border" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="text-sm text-muted">Belum ada upload</p>
+                <p className="mt-1 text-xs text-border">Upload ZIP untuk melihat progress di sini</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {progresses.map((entry) => (
+                  <ProgressCard
+                    key={entry.upload_id}
+                    entry={entry}
+                    onRemove={() => removeEntry(entry.upload_id)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ── Sub-component: DryRunCard ─────────────────────────────────────────────────
+function DryRunCard({ item }: { item: DryRunItem }) {
+  const [open, setOpen] = useState(false);
+
+  const typeSourceLabel: Record<string, string> = {
+    "type.txt": "type.txt ✨",
+    "file_marker": "file marker",
+    "api_param": "default param",
+  };
+
+  const statusBadge = item.exists
+    ? { label: "Sudah Ada", cls: "bg-yellow-500/10 text-yellow-400" }
+    : { label: "Baru", cls: "bg-emerald-500/10 text-emerald-400" };
+
+  return (
+    <div className="rounded-xl border border-border bg-card-bg p-4">
+      {/* Row 1: title + badge */}
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+            <span className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${statusBadge.cls}`}>
+              {statusBadge.label}
+            </span>
+          </div>
+          <p className="mt-0.5 text-xs text-muted font-mono">{item.slug}</p>
+        </div>
+      </div>
+
+      {/* Row 2: type + status badges */}
+      <div className="mb-3 flex flex-wrap gap-2">
+        {item.detected_type && (
+          <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-400">
+            {item.detected_type}
+            {item.type_source && (
+              <span className="ml-1 opacity-70">
+                via {typeSourceLabel[item.type_source] ?? item.type_source}
+              </span>
+            )}
+          </span>
+        )}
+        {item.detected_status && (
+          <span className="rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-400">
+            {item.detected_status}
+            {item.status_from_file && <span className="ml-1 opacity-70">via status.txt ✨</span>}
+          </span>
+        )}
+        {item.has_cover && (
+          <span className="rounded bg-card-bg border border-border px-2 py-0.5 text-[10px] text-muted">
+            🖼️ cover{item.cover_format}
+          </span>
+        )}
+        {item.has_description && (
+          <span className="rounded bg-card-bg border border-border px-2 py-0.5 text-[10px] text-muted">
+            📄 desc
+          </span>
+        )}
+        {item.genres.length > 0 && (
+          <span className="rounded bg-card-bg border border-border px-2 py-0.5 text-[10px] text-muted">
+            🏷️ {item.genres.length} genre
+          </span>
+        )}
+        {item.alt_titles.length > 0 && (
+          <span className="rounded bg-card-bg border border-border px-2 py-0.5 text-[10px] text-muted">
+            🌐 {item.alt_titles.length} alt title
+          </span>
+        )}
+      </div>
+
+      {/* Row 3: chapters summary + toggle */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted">
+          📁 {item.total_chapters} chapter
+          {item.chapters.filter(c => c.has_preview).length > 0 && (
+            <span className="ml-1 text-accent">
+              · {item.chapters.filter(c => c.has_preview).length} preview
+            </span>
+          )}
+        </span>
+        {item.chapters.length > 0 && (
+          <button
+            onClick={() => setOpen(v => !v)}
+            className="text-xs text-accent hover:underline"
+          >
+            {open ? "▾ Sembunyikan" : "▸ Detail chapter"}
+          </button>
+        )}
+      </div>
+
+      {/* Chapter detail */}
+      {open && item.chapters.length > 0 && (
+        <div className="mt-2 space-y-1 rounded-lg bg-background px-3 py-2">
+          {item.chapters.map((ch, i) => (
+            <div key={i} className="flex items-center justify-between text-xs text-muted">
+              <span>{ch.chapter_label}</span>
+              <span className="flex items-center gap-2">
+                <span>{ch.file_count} hal</span>
+                {ch.has_preview && (
+                  <span className="text-accent">🖼️ preview</span>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -467,6 +678,12 @@ function ProgressCard({
 
   const [showDetail, setShowDetail] = useState(false);
 
+  // Parse result summary jika ada
+  const result = entry.result as Record<string, unknown> | undefined;
+  const importedCount = result?.imported as number | undefined;
+  const failedCount = result?.failed as number | undefined;
+  const totalManga = result?.total_manga as number | undefined;
+
   return (
     <div className="rounded-xl border border-border bg-card-bg p-4">
       {/* Header */}
@@ -493,9 +710,8 @@ function ProgressCard({
       {/* Progress bar */}
       <div className="mb-2 h-1.5 w-full overflow-hidden rounded-full bg-border">
         <div
-          className={`h-full rounded-full transition-all duration-500 ${barColor} ${
-            !isDone && entry.status !== "error" ? "animate-pulse" : ""
-          }`}
+          className={`h-full rounded-full transition-all duration-500 ${barColor} ${!isDone && entry.status !== "error" ? "animate-pulse" : ""
+            }`}
           style={{ width: `${entry.progress}%` }}
         />
       </div>
@@ -512,6 +728,23 @@ function ProgressCard({
           <span className="max-w-[140px] truncate">{entry.current_file}</span>
         )}
       </div>
+
+      {/* Summary badge on complete */}
+      {entry.status === "completed" && totalManga !== undefined && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+            ✅ {importedCount ?? 0} diimport
+          </span>
+          {(failedCount ?? 0) > 0 && (
+            <span className="rounded bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-400">
+              ❌ {failedCount} gagal
+            </span>
+          )}
+          <span className="rounded bg-card-bg border border-border px-2 py-0.5 text-[10px] text-muted">
+            {totalManga} total manga
+          </span>
+        </div>
+      )}
 
       {/* Errors */}
       {entry.errors && entry.errors.length > 0 && (
@@ -531,7 +764,7 @@ function ProgressCard({
             onClick={() => setShowDetail((v) => !v)}
             className="flex items-center gap-1 text-xs text-accent hover:underline"
           >
-            {showDetail ? "▾ Sembunyikan" : "▸ Lihat detail"}
+            {showDetail ? "▾ Sembunyikan" : "▸ Lihat detail JSON"}
           </button>
           {showDetail && (
             <pre className="mt-2 max-h-40 overflow-auto rounded-lg bg-background p-3 text-[10px] font-mono text-muted">

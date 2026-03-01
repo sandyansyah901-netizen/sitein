@@ -4,9 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { uploadSingleChapter } from "@/app/lib/upload-api";
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
+import { normalizeSlug } from "@/app/lib/utils";
 
 export default function SingleChapterUploadPage() {
   const router = useRouter();

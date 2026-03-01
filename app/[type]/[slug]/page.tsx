@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { fetchMangaDetail, fetchChapterList, fetchMangaList } from "@/app/lib/api";
+import { fromSeoSlug } from "@/app/lib/utils";
 import SiteHeader from "@/app/components/SiteHeader";
 import SiteFooter from "@/app/components/SiteFooter";
 import ComicDetailClient from "@/app/components/ComicDetailClient";
@@ -12,7 +13,8 @@ interface PageProps {
 }
 
 export default async function ComicDetailPage({ params }: PageProps) {
-  const { type, slug } = await params;
+  const { type, slug: rawSlug } = await params;
+  const slug = fromSeoSlug(rawSlug);
 
   const [manga, chapterData, recommendedList] = await Promise.all([
     fetchMangaDetail(slug),
@@ -52,7 +54,8 @@ export default async function ComicDetailPage({ params }: PageProps) {
 }
 
 export async function generateMetadata({ params }: PageProps) {
-  const { slug } = await params;
+  const { slug: rawSlug } = await params;
+  const slug = fromSeoSlug(rawSlug);
   const manga = await fetchMangaDetail(slug);
 
   if (!manga) {

@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { adminCreateManga } from "@/app/lib/admin-api";
 import { fetchGenres, fetchMangaTypes, type Genre, type MangaType } from "@/app/lib/api";
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
+import { normalizeSlug } from "@/app/lib/utils";
 
 export default function CreateMangaPage() {
   const router = useRouter();
@@ -24,8 +22,8 @@ export default function CreateMangaPage() {
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
 
   useEffect(() => {
-    fetchGenres().then(setGenres).catch(() => {});
-    fetchMangaTypes().then(setTypes).catch(() => {});
+    fetchGenres().then(setGenres).catch(() => { });
+    fetchMangaTypes().then(setTypes).catch(() => { });
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -94,7 +92,7 @@ export default function CreateMangaPage() {
             value={title}
             onChange={(e) => {
               setTitle(e.target.value);
-              setSlug(slugify(e.target.value));
+              setSlug(normalizeSlug(e.target.value));
             }}
             placeholder="contoh: One Piece"
             required
@@ -200,11 +198,10 @@ export default function CreateMangaPage() {
                   key={g.id}
                   type="button"
                   onClick={() => toggleGenre(g.slug)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${
-                    selectedGenres.includes(g.slug)
-                      ? "border-accent bg-accent/10 text-accent"
-                      : "border-border text-muted hover:border-accent/50 hover:text-foreground"
-                  }`}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors ${selectedGenres.includes(g.slug)
+                    ? "border-accent bg-accent/10 text-accent"
+                    : "border-border text-muted hover:border-accent/50 hover:text-foreground"
+                    }`}
                 >
                   {selectedGenres.includes(g.slug) ? "✓ " : ""}{g.name}
                 </button>

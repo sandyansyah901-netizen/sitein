@@ -12,6 +12,7 @@ import {
 } from "@/app/lib/user-api";
 import { Trash2, List, Star } from "lucide-react";
 import Link from "next/link";
+import { mangaHref } from "@/app/lib/utils";
 
 function normalizeCover(url: string | null | undefined): string {
     if (!url) return "/placeholder-cover.jpg";
@@ -150,8 +151,8 @@ export default function ListsPage() {
                         key={value ?? "all"}
                         onClick={() => handleTabChange(value)}
                         className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap shrink-0 transition-colors ${activeTab === value
-                                ? `${color} text-white`
-                                : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#222]"
+                            ? `${color} text-white`
+                            : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-[#222]"
                             }`}
                     >
                         {label}
@@ -184,7 +185,7 @@ export default function ListsPage() {
                                     className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#111] p-3"
                                 >
                                     {/* Cover */}
-                                    <Link href={`/${item.manga_slug}`} className="shrink-0">
+                                    <Link href={mangaHref(item.manga_type_slug, item.manga_slug)} className="shrink-0">
                                         <div className="w-10 h-14 rounded overflow-hidden bg-gray-100 dark:bg-[#222]">
                                             <img
                                                 src={normalizeCover(item.manga_cover)}
@@ -196,7 +197,7 @@ export default function ListsPage() {
 
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
-                                        <Link href={`/${item.manga_slug}`}>
+                                        <Link href={mangaHref(item.manga_type_slug, item.manga_slug)}>
                                             <p className="text-[13px] font-semibold text-[#222] dark:text-white truncate hover:text-[#E50914]">
                                                 {item.manga_title}
                                             </p>

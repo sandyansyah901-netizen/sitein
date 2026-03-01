@@ -6,6 +6,7 @@ export interface ReadingHistoryItem {
     manga_id: number;
     manga_title: string;
     manga_slug: string;
+    manga_type_slug: string;
     manga_cover: string;
     chapter_id: number;
     chapter_label: string;
@@ -19,6 +20,7 @@ export interface BookmarkItem {
     manga_id: number;
     manga_title: string;
     manga_slug: string;
+    manga_type_slug: string;
     manga_cover: string;
     total_chapters: number;
     latest_chapter: string | null;
@@ -36,6 +38,7 @@ export interface ReadingListItem {
     manga_id: number;
     manga_title: string;
     manga_slug: string;
+    manga_type_slug: string;
     manga_cover: string;
     status: ReadingListStatus;
     rating: number | null;
@@ -274,3 +277,60 @@ export async function getReadingStats(
     });
     return handleResponse(res);
 }
+
+// ─── Avatar ───────────────────────────────────────────────
+
+export interface AvatarUploadResult {
+    message: string;
+    avatar_url: string;
+    thumbnail_url?: string;
+    imgid?: string;
+    old_avatar_url: string | null;
+    user: { id: number; username: string };
+}
+
+export interface AvatarUrlResult {
+    message: string;
+    avatar_url: string;
+    old_avatar_url: string | null;
+}
+
+/** POST /api/v1/auth/avatar/upload — upload file foto profil */
+export async function uploadAvatar(
+    token: string,
+    file: File
+): Promise<AvatarUploadResult> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${API_BASE}/auth/avatar/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+    });
+    return handleResponse<AvatarUploadResult>(res);
+}
+
+/** PUT /api/v1/auth/avatar/url?avatar_url=... — set avatar dari URL eksternal */
+export async function updateAvatarUrl(
+    token: string,
+    avatarUrl: string
+): Promise<AvatarUrlResult> {
+    const params = new URLSearchParams({ avatar_url: avatarUrl });
+    const res = await fetch(`${API_BASE}/auth/avatar/url?${params}`, {
+        method: "PUT",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<AvatarUrlResult>(res);
+}
+
+/** DELETE /api/v1/auth/avatar — hapus foto profil */
+export async function deleteAvatar(
+    token: string
+): Promise<{ message: string }> {
+    const res = await fetch(`${API_BASE}/auth/avatar`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+    });
+    return handleResponse<{ message: string }>(res);
+}
+

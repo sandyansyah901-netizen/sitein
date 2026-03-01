@@ -4,13 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import SiteHeader from "@/app/components/SiteHeader";
 import SiteFooter from "@/app/components/SiteFooter";
-import { BookMarked, History, List, LayoutDashboard } from "lucide-react";
+import { BookMarked, History, List, LayoutDashboard, User } from "lucide-react";
 
 const NAV = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Reading History", href: "/dashboard/history", icon: History },
     { label: "Bookmarks", href: "/dashboard/bookmarks", icon: BookMarked },
     { label: "Reading List", href: "/dashboard/lists", icon: List },
+    { label: "Profil", href: "/dashboard/profile", icon: User },
 ];
 
 export default function DashboardLayout({
@@ -38,8 +39,8 @@ export default function DashboardLayout({
                                     key={href}
                                     href={href}
                                     className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors ${active
-                                            ? "bg-[#E50914]/10 text-[#E50914]"
-                                            : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1a1a1a] hover:text-[#222] dark:hover:text-white"
+                                        ? "bg-[#E50914]/10 text-[#E50914]"
+                                        : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#1a1a1a] hover:text-[#222] dark:hover:text-white"
                                         }`}
                                 >
                                     <Icon className="w-4 h-4 shrink-0" />
@@ -60,8 +61,8 @@ export default function DashboardLayout({
                                         key={href}
                                         href={href}
                                         className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-medium whitespace-nowrap shrink-0 transition-colors ${active
-                                                ? "bg-[#E50914] text-white"
-                                                : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-400"
+                                            ? "bg-[#E50914] text-white"
+                                            : "bg-gray-100 dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-400"
                                             }`}
                                     >
                                         <Icon className="w-3 h-3" />

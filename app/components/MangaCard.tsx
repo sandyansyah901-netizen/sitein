@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Manga } from "@/app/lib/api";
 import { normalizeCoverUrl } from "@/app/lib/admin-api";
+import { mangaHref } from "@/app/lib/utils";
 
 function getTypeColor(typeSlug?: string) {
   switch (typeSlug) {
@@ -57,9 +58,7 @@ export default function MangaCard({ manga }: { manga: Manga }) {
     "https://via.placeholder.com/300x420/1a1a2e/666?text=No+Cover";
 
   // PENTING: URL dinamis berdasarkan type
-  const mangaUrl = manga.type?.slug
-    ? `/${manga.type.slug}/${manga.slug}`
-    : `/manga/${manga.slug}`; // fallback jika type tidak ada
+  const mangaUrl = mangaHref(manga.type?.slug, manga.slug);
 
   console.log("🔗 MangaCard URL:", {
     title: manga.title,

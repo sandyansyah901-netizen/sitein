@@ -4,9 +4,7 @@ import { useEffect, useState } from "react";
 import { adminCreateMangaType } from "@/app/lib/admin-api";
 import { fetchMangaTypes, type MangaType } from "@/app/lib/api";
 
-function slugify(text: string) {
-  return text.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
-}
+import { normalizeSlug } from "@/app/lib/utils";
 
 const TYPE_COLORS: Record<string, string> = {
   manga: "bg-blue-500/10 text-blue-400",
@@ -81,7 +79,7 @@ export default function AdminMangaTypesPage() {
                 <input
                   type="text"
                   value={name}
-                  onChange={(e) => { setName(e.target.value); setSlug(slugify(e.target.value)); }}
+                  onChange={(e) => { setName(e.target.value); setSlug(normalizeSlug(e.target.value)); }}
                   placeholder="contoh: Manhwa"
                   required
                   maxLength={50}

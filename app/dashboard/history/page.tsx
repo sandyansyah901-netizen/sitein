@@ -10,18 +10,20 @@ import {
 } from "@/app/lib/user-api";
 import { Trash2, BookOpen } from "lucide-react";
 import Link from "next/link";
+import { mangaHref } from "@/app/lib/utils";
 
-function timeAgo(dateString: string): string {
-    const now = new Date();
-    const date = new Date(dateString);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return `${diffMins} menit lalu`;
-    if (diffHours < 24) return `${diffHours} jam lalu`;
-    if (diffDays < 30) return `${diffDays} hari lalu`;
-    return date.toLocaleDateString("id-ID");
+function formatDateTime(dateString: string): string {
+    // Backend returns naive UTC timestamps like "2026-02-25T14:15:08"
+    // We must append "Z" to force the browser to parse it as UTC, not local time.
+    const normalized = dateString.endsWith("Z") ? dateString : `${dateString}Z`;
+    const date = new Date(normalized);
+    return date.toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 }
 
 function normalizeCover(url: string | null | undefined): string {
@@ -116,13 +118,14 @@ export default function HistoryPage() {
                     <div className="space-y-2">
                         {items.map((item) => {
                             const progress = Math.round((item.page_number / item.total_pages) * 100);
+                            const href = mangaHref(item.manga_type_slug, item.manga_slug);
                             return (
                                 <div
                                     key={`${item.manga_slug}-${item.chapter_slug}`}
                                     className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#111] p-3 group"
                                 >
                                     {/* Cover */}
-                                    <Link href={`/${item.manga_slug}`} className="shrink-0">
+                                    <Link href={href} className="shrink-0">
                                         <div className="w-10 h-14 rounded overflow-hidden bg-gray-100 dark:bg-[#222]">
                                             <img
                                                 src={normalizeCover(item.manga_cover)}
@@ -134,7 +137,7 @@ export default function HistoryPage() {
 
                                     {/* Info */}
                                     <div className="flex-1 min-w-0">
-                                        <Link href={`/${item.manga_slug}`}>
+                                        <Link href={href}>
                                             <p className="text-[13px] font-semibold text-[#222] dark:text-white truncate hover:text-[#E50914]">
                                                 {item.manga_title}
                                             </p>
@@ -153,7 +156,7 @@ export default function HistoryPage() {
 
                                     {/* Meta + Delete */}
                                     <div className="flex flex-col items-end gap-2 shrink-0">
-                                        <span className="text-[10px] text-gray-400">{timeAgo(item.last_read_at)}</span>
+                                        <span className="text-[10px] text-gray-400">{formatDateTime(item.last_read_at)}</span>
                                         <button
                                             onClick={() => handleDelete(item.manga_slug)}
                                             disabled={deleting === item.manga_slug}

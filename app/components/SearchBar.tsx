@@ -1,5 +1,7 @@
 "use client";
 
+import { mangaHref } from "@/app/lib/utils";
+
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useCallback, useEffect, useRef } from "react";
 
@@ -99,12 +101,12 @@ export default function SearchBar({ variant = "default", onClose }: SearchBarPro
     [query, router, onClose]
   );
 
-  // Klik suggestion → detail manga
-  const handleSelectSuggestion = (slug: string) => {
+  // Klik suggestion → detail manga (pakai type-based URL)
+  const handleSelectSuggestion = (s: Suggestion) => {
     setShowDropdown(false);
     setQuery("");
     setSuggestions([]);
-    router.push(`/manga/${slug}`);
+    router.push(mangaHref(s.type?.slug, s.slug));
     onClose?.();
   };
 
@@ -187,7 +189,7 @@ export default function SearchBar({ variant = "default", onClose }: SearchBarPro
               <li key={s.slug}>
                 <button
                   type="button"
-                  onClick={() => handleSelectSuggestion(s.slug)}
+                  onClick={() => handleSelectSuggestion(s)}
                   className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-[#1a1a1a] transition-colors"
                 >
                   {/* Cover */}

@@ -33,6 +33,28 @@ async function adminFetch(url: string, options: RequestInit = {}): Promise<unkno
 }
 
 /**
+ * adminFetch dengan timeout — untuk endpoint yang bisa hang lama (groups/status, groups/quota)
+ */
+async function adminFetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 12000
+): Promise<unknown> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await adminFetch(url, { ...options, signal: controller.signal });
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Request timeout (${timeoutMs / 1000}s) — backend tidak merespon`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Normalize cover URL dari berbagai format ke path relatif
  * yang akan di-proxy oleh Next.js rewrite ke backend.
  *
@@ -117,10 +139,22 @@ export interface AdminUsersResponse {
 
 export interface StorageSource {
   id: number;
+  // Nama bisa di berbagai field tergantung API version
   name?: string;
+  source_name?: string;
   remote_name?: string;
+  // Path info
+  base_path?: string;
+  base_folder_id?: string;
+  storage_type?: string;
+  // Status
   status?: string;
   is_active?: boolean;
+  // Stats
+  manga_count?: number;
+  total_manga?: number;
+  total_chapters?: number;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -183,12 +217,118 @@ export interface AdminChapterListResponse {
   total?: number;
 }
 
+export interface GroupStatusItem {
+  group: number;
+  primary: string;
+  backups: string[];
+  all_remotes: string[];
+  path_prefix: string;
+  quota_gb: number;
+  configured: boolean;
+}
+
+export interface GroupQuotaItem {
+  group: number;
+  primary: string;
+  backups: string[];
+  quota_gb: number;
+  uploaded_gb: number;
+  is_full: boolean;
+  full_since: string | null;
+  prefix: string | null;
+}
+
+export interface DaemonInfo {
+  alive: boolean;
+  ready: boolean;
+  url: string | null;
+  port?: number;
+  status: string;
+}
+
+export interface DaemonHealth {
+  group1_daemons_ready?: number;
+  group1_daemons_total?: number;
+  daemons: Record<string, DaemonInfo>;
+  [key: string]: unknown;
+}
+
 export interface GroupsStatus {
+  active_upload_group: number;
+  auto_switch_enabled: boolean;
+  configured_groups: number[];
+  groups: Record<string, GroupStatusItem>;
+  quota: {
+    active_upload_group: number;
+    auto_switch_enabled: boolean;
+    groups: Record<string, GroupQuotaItem>;
+  };
+  daemon_health: DaemonHealth;
   [key: string]: unknown;
 }
 
 export interface GroupsQuota {
+  active_upload_group: number;
+  auto_switch_enabled: boolean;
+  group1_quota_limit_gb?: number;
+  quota_tracker: {
+    active_upload_group: number;
+    auto_switch_enabled: boolean;
+    groups: Record<string, GroupQuotaItem>;
+  };
   [key: string]: unknown;
+}
+
+// Storage test result — response dari GET /admin/storage/{id}/test
+export interface RemoteStatus {
+  alive: boolean;
+  ready: boolean;
+  url: string | null;
+  status: string;
+}
+
+export interface StorageTestResult {
+  success: boolean;
+  storage_id: number;
+  source_name?: string;
+  status: string;
+  total_remotes?: number;
+  healthy_remotes?: number;
+  available_remotes?: number;
+  remotes_status?: Record<string, RemoteStatus>;
+  group2_configured?: boolean;
+  group2_enabled?: boolean;
+  error?: string;
+  [key: string]: unknown;
+}
+
+// GDrive real usage — response dari GET /admin/storage/gdrive-usage
+export interface GdriveRemoteUsage {
+  remote: string;
+  group: number;
+  total_bytes?: number;
+  used_bytes?: number;
+  free_bytes?: number;
+  trashed_bytes?: number;
+  total_gb: number;
+  used_gb: number;
+  free_gb: number;
+  trashed_gb?: number;
+  error: string | null;
+}
+
+export interface GdriveGroupUsage {
+  group: number;
+  remotes: GdriveRemoteUsage[];
+  total_used_gb: number;
+  total_free_gb: number;
+  total_capacity_gb: number;
+}
+
+export interface GdriveUsageResult {
+  groups: Record<string, GdriveGroupUsage>;
+  total_remotes_queried: number;
+  fetched_at: string;
 }
 
 export interface CacheStats {
@@ -505,7 +645,7 @@ export async function adminUploadCover(
   const token = getToken();
   if (!token) throw new Error("Akses ditolak.");
   const fd = new FormData();
-  fd.append("cover_file", file);
+  fd.append("cover", file);
 
   const res = await fetch(
     `${API_BASE_URL}/admin/manga/${mangaId}/cover?backup_to_gdrive=${backupToGdrive}`,
@@ -860,14 +1000,28 @@ export async function adminDeleteThumbnail(
 
 // GET /admin/storage
 export async function fetchAdminStorage(): Promise<StorageSource[]> {
-  return adminFetch(`${API_BASE_URL}/admin/storage`) as Promise<StorageSource[]>;
+  const data = await adminFetch(`${API_BASE_URL}/admin/storage`);
+  // Handle both array response and wrapped {items: [...], total: N} response
+  if (Array.isArray(data)) return data as StorageSource[];
+  const wrapped = data as Record<string, unknown>;
+  if (Array.isArray(wrapped?.items)) return wrapped.items as StorageSource[];
+  if (Array.isArray(wrapped?.sources)) return wrapped.sources as StorageSource[];
+  return [];
 }
 
-// POST /admin/storage/{storage_id}/test
-export async function adminTestStorage(storageId: number): Promise<unknown> {
-  return adminFetch(`${API_BASE_URL}/admin/storage/${storageId}/test`, {
-    method: "POST",
-  });
+// GET /admin/storage/{storage_id}/test
+export async function adminTestStorage(storageId: number): Promise<StorageTestResult> {
+  return adminFetch(`${API_BASE_URL}/admin/storage/${storageId}/test`) as Promise<StorageTestResult>;
+}
+
+// GET /admin/storage/gdrive-usage — blocking (~1-3s per remote, parallel)
+// ⚠️ Panggil hanya saat user click manual, bukan auto-poll
+export async function fetchGdriveUsage(): Promise<GdriveUsageResult> {
+  return adminFetchWithTimeout(
+    `${API_BASE_URL}/admin/storage/gdrive-usage`,
+    {},
+    30000 // max 30 detik untuk banyak remote
+  ) as Promise<GdriveUsageResult>;
 }
 
 // PUT /admin/storage/{storage_id}/status
@@ -885,23 +1039,27 @@ export async function adminToggleStorageStatus(
 // STORAGE GROUPS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// GET /admin/groups/status
+// GET /admin/groups/status — non-blocking async (backend fix 27 Feb)
 export async function fetchGroupsStatus(): Promise<GroupsStatus> {
-  return adminFetch(
-    `${API_BASE_URL}/admin/groups/status`
+  return adminFetchWithTimeout(
+    `${API_BASE_URL}/admin/groups/status`,
+    {},
+    15000
   ) as Promise<GroupsStatus>;
 }
 
-// GET /admin/groups/quota
+// GET /admin/groups/quota — non-blocking async (backend fix 27 Feb)
 export async function fetchGroupsQuota(): Promise<GroupsQuota> {
-  return adminFetch(
-    `${API_BASE_URL}/admin/groups/quota`
+  return adminFetchWithTimeout(
+    `${API_BASE_URL}/admin/groups/quota`,
+    {},
+    15000
   ) as Promise<GroupsQuota>;
 }
 
 // POST /admin/groups/switch
 export async function adminSwitchGroup(
-  targetGroup: 1 | 2
+  targetGroup: number
 ): Promise<unknown> {
   return adminFetch(
     `${API_BASE_URL}/admin/groups/switch?target_group=${targetGroup}`,
@@ -963,14 +1121,14 @@ export async function fetchRemotesStats(): Promise<RemoteStats> {
 }
 
 // GET /admin/remotes/best
-export async function fetchBestRemote(group: 1 | 2 = 1): Promise<unknown> {
+export async function fetchBestRemote(group: number = 1): Promise<unknown> {
   return adminFetch(`${API_BASE_URL}/admin/remotes/best?group=${group}`);
 }
 
 // POST /admin/remotes/{remote_name}/reset
 export async function adminResetRemoteHealth(
   remoteName: string,
-  group: 1 | 2 = 1
+  group: number = 1
 ): Promise<unknown> {
   return adminFetch(
     `${API_BASE_URL}/admin/remotes/${encodeURIComponent(remoteName)}/reset?group=${group}`,
@@ -1213,4 +1371,57 @@ export async function deleteAllChapterViews(): Promise<ViewsDeleteResult> {
     `${API_BASE_URL}/admin/analytics/chapter-views/all?confirm=true`,
     { method: "DELETE" }
   ) as Promise<ViewsDeleteResult>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMGURL TOKEN MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface ImgurlTokenInfo {
+  index: number;
+  token_preview: string;
+  usage_today: number;
+  limit: number;
+  over_limit: boolean;
+}
+
+export interface ImgurlTokenStatus {
+  status: string;
+  token_file: string;
+  daily_limit_per_token: number;
+  rotation_strategy: string;
+  total_tokens: number;
+  current_index: number;
+  tokens: ImgurlTokenInfo[];
+}
+
+// GET /api/admin/imgurl/token-status
+export async function fetchImgurlTokenStatus(): Promise<ImgurlTokenStatus> {
+  const token = getToken();
+  if (!token) throw new Error("Akses ditolak.");
+  const ADMIN_BASE = "http://127.0.0.1:8000/api/admin";
+  const res = await fetch(`${ADMIN_BASE}/imgurl/token-status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as Record<string, string>)?.detail || `API error: ${res.status}`);
+  }
+  return res.json() as Promise<ImgurlTokenStatus>;
+}
+
+// POST /api/admin/imgurl/reload-tokens
+export async function reloadImgurlTokens(): Promise<ImgurlTokenStatus> {
+  const token = getToken();
+  if (!token) throw new Error("Akses ditolak.");
+  const ADMIN_BASE = "http://127.0.0.1:8000/api/admin";
+  const res = await fetch(`${ADMIN_BASE}/imgurl/reload-tokens`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as Record<string, string>)?.detail || `API error: ${res.status}`);
+  }
+  return res.json() as Promise<ImgurlTokenStatus>;
 }

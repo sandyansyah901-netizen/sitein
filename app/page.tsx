@@ -59,9 +59,14 @@ export default async function Home({ searchParams }: Props) {
       })) ?? [],
     };
   }).sort((a, b) => {
-    const aDate = a.latest_chapters?.[0]?.created_at ?? a.updated_at ?? "";
-    const bDate = b.latest_chapters?.[0]?.created_at ?? b.updated_at ?? "";
-    return bDate.localeCompare(aDate);
+    const toMs = (s?: string) => {
+      if (!s) return 0;
+      const normalized = s.endsWith("Z") || s.includes("+") ? s : s + "Z";
+      return new Date(normalized).getTime();
+    };
+    const aMs = toMs(a.latest_chapters?.[0]?.created_at ?? a.updated_at);
+    const bMs = toMs(b.latest_chapters?.[0]?.created_at ?? b.updated_at);
+    return bMs - aMs;
   });
 
   const manhwaMangas = allMangas.filter((m) => m.type?.slug === "manhwa").slice(0, 14);

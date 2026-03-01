@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Manga } from "@/app/lib/api";
+import { mangaHref } from "@/app/lib/utils";
 
 interface Props {
   manga: Manga;
@@ -20,7 +21,7 @@ function getTypeBadgeColor(typeSlug?: string) {
 }
 
 export default function SiteComicCard({ manga, rank }: Props) {
-  const href = `/${manga.type?.slug || "manga"}/${manga.slug}`;
+  const href = mangaHref(manga.type?.slug, manga.slug);
 
   return (
     <Link href={href} className="group block shrink-0 w-[120px] md:w-auto">

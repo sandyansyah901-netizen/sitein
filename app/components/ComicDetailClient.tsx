@@ -15,6 +15,7 @@ import {
 import type { Manga, Chapter } from "@/app/lib/api";
 import { addBookmark, removeBookmark, checkBookmark, addToReadingList } from "@/app/lib/user-api";
 import { useAuth } from "@/app/lib/auth";
+import { toSeoSlug, mangaHref } from "@/app/lib/utils";
 
 interface Props {
   manga: Manga;
@@ -74,7 +75,7 @@ export default function ComicDetailClient({
   )[0];
 
   const firstChapterHref = firstChapter
-    ? `/${typeSlug}/${manga.slug}/chapter/${padChapterNumber(firstChapter.chapter_main, firstChapter.chapter_sub)}`
+    ? `/${typeSlug}/${toSeoSlug(manga.slug)}/chapter/${padChapterNumber(firstChapter.chapter_main, firstChapter.chapter_sub)}`
     : null;
 
   return (
@@ -277,7 +278,7 @@ export default function ComicDetailClient({
               <div className="flex flex-col gap-2">
                 {visibleChapters.map((ch, idx) => {
                   const chapterNum = padChapterNumber(ch.chapter_main, ch.chapter_sub);
-                  const href = `/${typeSlug}/${manga.slug}/chapter/${chapterNum}`;
+                  const href = `/${typeSlug}/${toSeoSlug(manga.slug)}/chapter/${chapterNum}`;
                   const isFirst8 = idx < 8;
                   const isLast = idx === sortedChapters.length - 1;
 
@@ -287,21 +288,6 @@ export default function ComicDetailClient({
                       href={href}
                       className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-[#111] transition-colors group"
                     >
-                      {/* Thumbnail */}
-                      <div className="w-[56px] h-[84px] shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-[#1a1a1a]">
-                        {ch.preview_url ? (
-                          <img
-                            src={ch.preview_url}
-                            alt={ch.chapter_label}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400 font-bold">
-                            Ch.{ch.chapter_main}
-                          </div>
-                        )}
-                      </div>
-
                       {/* Info */}
                       <div className="flex-1 min-w-0">
                         <p className="text-[12px] font-semibold text-[#222] dark:text-white line-clamp-1">
@@ -357,7 +343,7 @@ export default function ComicDetailClient({
                 </p>
                 <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
                   {recommended.map((rec) => {
-                    const href = `/${rec.type?.slug || "manga"}/${rec.slug}`;
+                    const href = mangaHref(rec.type?.slug, rec.slug);
                     return (
                       <Link key={rec.id} href={href} className="group block">
                         <div className="relative aspect-[3/4] overflow-hidden rounded-lg">

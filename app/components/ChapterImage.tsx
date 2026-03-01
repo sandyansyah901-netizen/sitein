@@ -99,27 +99,9 @@ export default function ChapterImage({
         </div>
       )}
 
-      {/* Page info overlay */}
-      {isLoaded && (
-        <div className="absolute bottom-2 right-2 flex flex-col items-end gap-1">
-          <div className="rounded-lg bg-black/70 px-3 py-1.5 backdrop-blur-sm">
-            <span className="text-sm font-bold text-white">{pageOrder}</span>
-            <span className="text-xs text-white/60"> / {totalPages}</span>
-          </div>
-          {loadComplete > 0 && (
-            <div className="rounded bg-black/60 px-2 py-0.5 text-[10px] text-white/70 backdrop-blur-sm font-mono">
-              ⏱️ {((loadComplete - loadStart) / 1000).toFixed(1)}s
-            </div>
-          )}
-        </div>
-      )}
 
-      {/* Anchor badge */}
-      {isAnchor && isLoaded && (
-        <div className="absolute top-2 left-2 rounded-lg bg-accent px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white shadow-lg">
-          ⚓ Anchor
-        </div>
-      )}
+
+
     </div>
   );
 }

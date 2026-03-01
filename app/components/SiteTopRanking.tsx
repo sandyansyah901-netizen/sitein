@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import type { Manga } from "@/app/lib/api";
+import { mangaHref } from "@/app/lib/utils";
 
 interface Props {
   title: string;
@@ -43,7 +44,7 @@ export default function SiteTopRanking({ title, mangas }: Props) {
           className="flex gap-2 overflow-x-auto scrollbar-hide pb-1"
         >
           {mangas.map((manga, i) => {
-            const href = `/${manga.type?.slug || "manga"}/${manga.slug}`;
+            const href = mangaHref(manga.type?.slug, manga.slug);
             return (
               <Link
                 key={manga.id}

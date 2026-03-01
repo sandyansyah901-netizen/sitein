@@ -14,7 +14,7 @@ const API_BASE_URL = "http://127.0.0.1:8000/api/v1";
 // ✅ Daftar username yang dianggap admin — tambah username lain jika perlu
 const ADMIN_USERNAMES = ["admin", "superadmin"];
 
-interface User {
+export interface User {
   id: number;
   username: string;
   email: string;
@@ -32,6 +32,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   isLoggedIn: boolean;
   isAdmin: boolean;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -112,11 +113,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetch(`${API_BASE_URL}/auth/logout`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
+      }).catch(() => { });
     }
     localStorage.removeItem("komik_token");
     setToken(null);
     setUser(null);
+  }, [token]);
+
+  const refreshUser = useCallback(async () => {
+    const t = token ?? localStorage.getItem("komik_token");
+    if (t) await fetchCurrentUser(t);
   }, [token]);
 
   const isAdmin = !!user && ADMIN_USERNAMES.includes(user.username);
@@ -132,6 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         logout,
         isLoggedIn: !!user,
         isAdmin,
+        refreshUser,
       }}
     >
       {children}

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useAuth } from "@/app/lib/auth";
 import { getReadingStats, getReadingHistory, type ReadingStats, type ReadingHistoryItem } from "@/app/lib/user-api";
 import { BookMarked, History, List, Clock, CheckCircle2, BookOpen, TrendingUp } from "lucide-react";
+import { mangaHref } from "@/app/lib/utils";
 
 function StatCard({
     label,
@@ -30,17 +31,18 @@ function StatCard({
     );
 }
 
-function timeAgo(dateString: string): string {
-    const now = new Date();
-    const date = new Date(dateString);
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-    if (diffMins < 60) return `${diffMins} menit lalu`;
-    if (diffHours < 24) return `${diffHours} jam lalu`;
-    if (diffDays < 30) return `${diffDays} hari lalu`;
-    return date.toLocaleDateString("id-ID");
+function formatDateTime(dateString: string): string {
+    // Backend returns naive UTC timestamps like "2026-02-25T14:15:08"
+    // We must append "Z" to force the browser to parse it as UTC, not local time.
+    const normalized = dateString.endsWith("Z") ? dateString : `${dateString}Z`;
+    const date = new Date(normalized);
+    return date.toLocaleString("id-ID", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
 }
 
 export default function DashboardPage() {
@@ -90,16 +92,35 @@ export default function DashboardPage() {
         <div className="space-y-6">
             {/* Profile header */}
             <div className="flex items-center gap-4 rounded-xl border border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#111] p-5">
-                <div className="w-14 h-14 rounded-full bg-[#E50914] flex items-center justify-center text-white text-2xl font-black select-none">
-                    {user?.username?.[0]?.toUpperCase() ?? "?"}
+                <div className="relative shrink-0">
+                    {user?.avatar_url ? (
+                        <img
+                            src={user.avatar_url}
+                            alt={user.username}
+                            className="w-14 h-14 rounded-full object-cover ring-2 ring-[#E50914]/20"
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                        />
+                    ) : (
+                        <div className="w-14 h-14 rounded-full bg-[#E50914] flex items-center justify-center text-white text-2xl font-black select-none">
+                            {user?.username?.[0]?.toUpperCase() ?? "?"}
+                        </div>
+                    )}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                     <h1 className="text-lg font-bold text-[#222] dark:text-white">{user?.username}</h1>
                     <p className="text-sm text-gray-500 dark:text-gray-400">{user?.email}</p>
                     <p className="text-[11px] text-gray-400 dark:text-gray-500 mt-0.5">
                         Bergabung {new Date(user?.created_at ?? "").toLocaleDateString("id-ID", { year: "numeric", month: "long" })}
                     </p>
                 </div>
+                <Link
+                    href="/dashboard/profile"
+                    className="shrink-0 rounded-lg border border-gray-200 dark:border-[#2a2a2a] px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-gray-400 hover:border-[#E50914]/40 hover:text-[#E50914] transition-colors"
+                >
+                    Edit Profil
+                </Link>
             </div>
 
             {/* Stats */}
@@ -165,7 +186,7 @@ export default function DashboardPage() {
                             return (
                                 <Link
                                     key={`${item.manga_slug}-${item.chapter_slug}`}
-                                    href={`/${item.manga_slug}`}
+                                    href={mangaHref(item.manga_type_slug, item.manga_slug)}
                                     className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#111] p-3 hover:border-[#E50914]/30 transition-colors group"
                                 >
                                     <div className="w-10 h-14 shrink-0 rounded overflow-hidden bg-gray-100 dark:bg-[#222]">
@@ -192,7 +213,7 @@ export default function DashboardPage() {
                                             />
                                         </div>
                                     </div>
-                                    <span className="text-[10px] text-gray-400 shrink-0">{timeAgo(item.last_read_at)}</span>
+                                    <span className="text-[10px] text-gray-400 shrink-0">{formatDateTime(item.last_read_at)}</span>
                                 </Link>
                             );
                         })}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Manga } from "@/app/lib/api";
+import { mangaHref } from "@/app/lib/utils";
 
 interface Props {
   mangas: Manga[];
@@ -10,7 +11,9 @@ interface Props {
 
 function formatChapterDate(dateString: string): string {
   const now = new Date();
-  const date = new Date(dateString);
+  // Pastikan timestamp diparse sebagai UTC (tambah 'Z' jika belum ada)
+  const normalized = dateString.endsWith("Z") || dateString.includes("+") ? dateString : dateString + "Z";
+  const date = new Date(normalized);
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / 60000);
   const diffHours = Math.floor(diffMs / 3600000);
@@ -59,7 +62,7 @@ export default function SiteUpdateSection({ mangas, currentPage, totalPages }: P
       {/* Grid */}
       <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 gap-2">
         {mangas.map((manga) => {
-          const href = `/${manga.type?.slug || "manga"}/${manga.slug}`;
+          const href = mangaHref(manga.type?.slug, manga.slug);
           const chapters = manga.latest_chapters ?? [];
 
           return (
@@ -152,8 +155,8 @@ export default function SiteUpdateSection({ mangas, currentPage, totalPages }: P
                   key={p}
                   href={`/?update_page=${p}`}
                   className={`w-8 h-8 flex items-center justify-center rounded-lg text-[12px] font-bold transition-colors ${p === currentPage
-                      ? "bg-[#E50914] text-white"
-                      : "border border-gray-200 dark:border-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914]"
+                    ? "bg-[#E50914] text-white"
+                    : "border border-gray-200 dark:border-[#2a2a2a] text-gray-600 dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914]"
                     }`}
                 >
                   {p}

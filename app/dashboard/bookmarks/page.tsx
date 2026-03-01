@@ -10,6 +10,7 @@ import {
 } from "@/app/lib/user-api";
 import { Trash2, BookMarked, ArrowUpDown } from "lucide-react";
 import Link from "next/link";
+import { mangaHref } from "@/app/lib/utils";
 
 function normalizeCover(url: string | null | undefined): string {
     if (!url) return "/placeholder-cover.jpg";
@@ -136,7 +137,7 @@ export default function BookmarksPage() {
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                         {items.map((item) => (
                             <div key={item.manga_slug} className="relative group">
-                                <Link href={`/${item.manga_slug}`}>
+                                <Link href={mangaHref(item.manga_type_slug, item.manga_slug)}>
                                     <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-gray-100 dark:bg-[#222]">
                                         <img
                                             src={normalizeCover(item.manga_cover)}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { Manga } from "@/app/lib/api";
+import { mangaHref } from "@/app/lib/utils";
 
 interface Props {
   mangas: Manga[];
@@ -37,7 +38,7 @@ export default function SiteHeroBanner({ mangas }: Props) {
   if (mangas.length === 0) return null;
 
   const getHref = (manga: Manga) =>
-    `/${manga.type?.slug || "manga"}/${manga.slug}`;
+    mangaHref(manga.type?.slug, manga.slug);
 
   return (
     <div className="max-w-[1200px] mx-auto px-3 pt-2">
@@ -47,9 +48,8 @@ export default function SiteHeroBanner({ mangas }: Props) {
           <Link
             key={manga.id}
             href={getHref(manga)}
-            className={`relative overflow-hidden cursor-pointer group ${
-              i === activeIndex ? "ring-2 ring-[#E50914]/60" : ""
-            }`}
+            className={`relative overflow-hidden cursor-pointer group ${i === activeIndex ? "ring-2 ring-[#E50914]/60" : ""
+              }`}
             onMouseEnter={() => setActiveIndex(i)}
           >
             <img
@@ -77,9 +77,8 @@ export default function SiteHeroBanner({ mangas }: Props) {
         {mangas.slice(0, 3).map((manga, i) => (
           <div
             key={manga.id}
-            className={`absolute inset-0 transition-opacity duration-500 ${
-              i === activeIndex ? "opacity-100 z-10" : "opacity-0 z-0"
-            }`}
+            className={`absolute inset-0 transition-opacity duration-500 ${i === activeIndex ? "opacity-100 z-10" : "opacity-0 z-0"
+              }`}
           >
             <Link href={getHref(manga)} className="block w-full h-full">
               <img
@@ -131,11 +130,10 @@ export default function SiteHeroBanner({ mangas }: Props) {
               <button
                 key={i}
                 onClick={() => goTo(i)}
-                className={`rounded-full transition-all ${
-                  i === activeIndex
+                className={`rounded-full transition-all ${i === activeIndex
                     ? "w-4 h-1.5 bg-white"
                     : "w-1.5 h-1.5 bg-white/50"
-                }`}
+                  }`}
                 aria-label={`Go to slide ${i + 1}`}
               />
             ))}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useEffect, useRef } from "react";
-import { Sun, Moon, Menu, X, LayoutDashboard, BookMarked, History, List, LogOut } from "lucide-react";
+import { Sun, Moon, Menu, X, LayoutDashboard, BookMarked, History, List, LogOut, User } from "lucide-react";
 import SearchBar from "./SearchBar";
 import LoginModal from "./LoginModal";
 import { useAuth } from "@/app/lib/auth";
@@ -70,6 +70,7 @@ export default function SiteHeader() {
     { label: "Reading History", href: "/dashboard/history", icon: History },
     { label: "Bookmarks", href: "/dashboard/bookmarks", icon: BookMarked },
     { label: "Reading List", href: "/dashboard/lists", icon: List },
+    { label: "Profil", href: "/dashboard/profile", icon: User },
   ];
 
   return (
@@ -101,7 +102,32 @@ export default function SiteHeader() {
             ))}
           </nav>
 
-          <div className="flex-1" />
+          {/* Mobile scrollable nav — sebelah kanan logo, bisa digeser */}
+          <div
+            className="md:hidden flex-1 overflow-x-auto mx-2"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            <style>{`.mobile-nav-inline::-webkit-scrollbar{display:none}`}</style>
+            <nav className="mobile-nav-inline flex items-center gap-2" style={{ whiteSpace: "nowrap" }}>
+              {[
+                { label: "Recommend", href: "/" },
+                { label: "Manhwa", href: "/?type_slug=manhwa" },
+                { label: "Manhua", href: "/?type_slug=manhua" },
+                { label: "Manga", href: "/?type_slug=manga" },
+              ].map(({ label, href }) => (
+                <Link
+                  key={label}
+                  href={href}
+                  className="inline-block shrink-0 px-3 py-1 rounded-full text-[12px] font-semibold border border-gray-200 dark:border-[#2a2a2a] text-[#555] dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914] dark:hover:text-[#E50914] transition-colors"
+                >
+                  {label}
+                </Link>
+              ))}
+            </nav>
+          </div>
+
+          {/* Desktop spacer */}
+          <div className="hidden md:block flex-1" />
 
           {/* Search bar (desktop) */}
           <div className="hidden md:flex items-center mr-2 w-[220px] relative">
@@ -143,10 +169,29 @@ export default function SiteHeader() {
               <div className="relative" ref={userMenuRef}>
                 <button
                   onClick={() => setUserMenuOpen((v) => !v)}
-                  className="w-8 h-8 rounded-full bg-[#E50914] flex items-center justify-center text-white text-[13px] font-black hover:opacity-90 transition-opacity"
+                  className="w-8 h-8 rounded-full overflow-hidden ring-1 ring-gray-200 dark:ring-[#2a2a2a] hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-[#E50914]/50"
                   aria-label="User menu"
                 >
-                  {user.username[0].toUpperCase()}
+                  {user.avatar_url ? (
+                    <img
+                      src={user.avatar_url}
+                      alt={user.username}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // fallback ke initial jika gambar gagal load
+                        (e.target as HTMLImageElement).style.display = "none";
+                        (e.target as HTMLImageElement).parentElement!.classList.add(
+                          "bg-[#E50914]", "flex", "items-center", "justify-center",
+                          "text-white", "text-[13px]", "font-black"
+                        );
+                        (e.target as HTMLImageElement).insertAdjacentText("afterend", user.username[0].toUpperCase());
+                      }}
+                    />
+                  ) : (
+                    <span className="w-full h-full bg-[#E50914] flex items-center justify-center text-white text-[13px] font-black">
+                      {user.username[0].toUpperCase()}
+                    </span>
+                  )}
                 </button>
 
                 {userMenuOpen && (
@@ -195,18 +240,6 @@ export default function SiteHeader() {
               </button>
             )}
 
-            {/* Mobile menu toggle */}
-            <button
-              onClick={() => setMobileMenuOpen((v) => !v)}
-              className="md:hidden p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-[#1a1a1a] transition-colors"
-              aria-label="Menu"
-            >
-              {mobileMenuOpen ? (
-                <X className="w-4 h-4 text-[#555] dark:text-gray-400" />
-              ) : (
-                <Menu className="w-4 h-4 text-[#555] dark:text-gray-400" />
-              )}
-            </button>
           </div>
         </div>
 
@@ -218,38 +251,6 @@ export default function SiteHeader() {
         )}
       </div>
 
-      {/* Mobile menu */}
-      {mobileMenuOpen && (
-        <div className="md:hidden border-t border-gray-100 dark:border-[#1e1e1e] bg-white dark:bg-[#0a0a0a] transition-colors">
-          <nav className="flex flex-col px-4 py-2">
-            {[
-              { label: "Recommend", href: "/" },
-              { label: "Manhwa", href: "/?type_slug=manhwa" },
-              { label: "Manhua", href: "/?type_slug=manhua" },
-              { label: "Manga", href: "/?type_slug=manga" },
-            ].map(({ label, href }) => (
-              <Link
-                key={label}
-                href={href}
-                onClick={() => setMobileMenuOpen(false)}
-                className="py-2.5 text-[13px] text-[#555] dark:text-gray-400 hover:text-[#222] dark:hover:text-white border-b border-gray-50 dark:border-[#111] last:border-0"
-              >
-                {label}
-              </Link>
-            ))}
-            {isLoggedIn && (
-              <>
-                <Link href="/dashboard" onClick={() => setMobileMenuOpen(false)} className="py-2.5 text-[13px] text-[#555] dark:text-gray-400 border-b border-gray-50 dark:border-[#111] hover:text-[#E50914]">
-                  Dashboard
-                </Link>
-                <button onClick={handleLogout} className="py-2.5 text-left text-[13px] text-red-500">
-                  Logout
-                </button>
-              </>
-            )}
-          </nav>
-        </div>
-      )}
       <LoginModal isOpen={loginOpen} onClose={() => setLoginOpen(false)} />
     </header>
   );
