@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import {
   fetchAdminMangaList, adminDeleteManga, adminToggleMangaStatus,
+  adminFetchCoverFromGdrive, adminSyncAllCoversFromGdrive,
   fetchAdminStorage, type AdminManga, type StorageSource,
 } from "@/app/lib/admin-api";
 
@@ -31,6 +32,9 @@ export default function AdminMangaPage() {
   const [error, setError] = useState("");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [fetchingCoverId, setFetchingCoverId] = useState<number | null>(null);
+  const [syncingCovers, setSyncingCovers] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true); setError("");
@@ -50,7 +54,7 @@ export default function AdminMangaPage() {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    fetchAdminStorage().then((d) => setStorages(Array.isArray(d) ? d : [])).catch(() => {});
+    fetchAdminStorage().then((d) => setStorages(Array.isArray(d) ? d : [])).catch(() => { });
   }, []);
 
   const handleDelete = async (manga: AdminManga) => {
@@ -75,6 +79,41 @@ export default function AdminMangaPage() {
     finally { setTogglingId(null); }
   };
 
+  const handleFetchCoverFromGdrive = async (manga: AdminManga) => {
+    setFetchingCoverId(manga.id);
+    try {
+      const res = await adminFetchCoverFromGdrive(manga.id);
+      alert("[OK] " + res.message);
+      await load();
+    } catch (e) {
+      alert("[Gagal] " + (e instanceof Error ? e.message : "Error ambil cover dari GDrive"));
+    } finally {
+      setFetchingCoverId(null);
+    }
+  };
+
+  const handleSyncAllCovers = async () => {
+    if (!confirm(
+      "Download SEMUA cover dari GDrive backup ke local server?\n\n" +
+      "PERHATIAN: Cover yang sudah ada di local akan di-REPLACE/overwrite dengan versi dari GDrive.\n" +
+      "Proses ini bisa memakan waktu beberapa menit tergantung jumlah cover.\n\n" +
+      "Lanjutkan?"
+    )) return;
+
+    setSyncingCovers(true);
+    setSyncResult(null);
+    try {
+      const res = await adminSyncAllCoversFromGdrive();
+      const msg = `Selesai! Downloaded: ${res.downloaded} cover, Gagal: ${res.failed} cover.${res.message ? " " + res.message : ""}`;
+      setSyncResult(msg);
+      await load(); // refresh tabel agar cover baru tampil
+    } catch (e) {
+      setSyncResult("[Gagal] " + (e instanceof Error ? e.message : "Error sync covers dari GDrive"));
+    } finally {
+      setSyncingCovers(false);
+    }
+  };
+
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
@@ -84,11 +123,48 @@ export default function AdminMangaPage() {
             Total <span className="font-semibold text-foreground">{total}</span> manga
           </p>
         </div>
-        <Link href="/admin/manga/create"
-          className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-hover">
-          + Tambah Manga
-        </Link>
+        <div className="flex items-center gap-2">
+          {/* Tombol Download Semua Cover dari GDrive */}
+          <button
+            onClick={handleSyncAllCovers}
+            disabled={syncingCovers}
+            className="flex items-center gap-2 rounded-lg border border-emerald-700/40 bg-emerald-900/20 px-4 py-2 text-sm font-semibold text-emerald-400 hover:bg-emerald-900/40 disabled:opacity-50 transition-colors"
+            title="Download semua cover dari GDrive backup ke local server"
+          >
+            {syncingCovers ? (
+              <>
+                <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Mengunduh...
+              </>
+            ) : (
+              <>
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Cover dari GDrive
+              </>
+            )}
+          </button>
+          <Link href="/admin/manga/create"
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white hover:bg-accent-hover">
+            + Tambah Manga
+          </Link>
+        </div>
       </div>
+
+      {/* Hasil sync covers */}
+      {syncResult && (
+        <div className={`mb-4 rounded-lg border px-4 py-3 text-sm flex items-center justify-between ${syncResult.startsWith("[Gagal]")
+          ? "border-red-800/40 bg-red-900/20 text-red-400"
+          : "border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
+          }`}>
+          <span>{syncResult}</span>
+          <button onClick={() => setSyncResult(null)} className="ml-4 text-muted hover:text-foreground text-xs">Tutup</button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="mb-4 flex flex-wrap gap-3">
@@ -97,7 +173,7 @@ export default function AdminMangaPage() {
             placeholder="Cari judul manga..." className="w-64 rounded-lg border border-border bg-card-bg px-3 py-2 text-sm text-foreground placeholder-muted outline-none focus:border-accent" />
           <button type="submit" className="rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-white hover:bg-accent-hover">Cari</button>
           {search && <button type="button" onClick={() => { setSearch(""); setSearchInput(""); setPage(1); }}
-            className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground">✕</button>}
+            className="rounded-lg border border-border px-3 py-2 text-sm text-muted hover:text-foreground">X</button>}
         </form>
         <select value={filterStorage} onChange={(e) => { setFilterStorage(e.target.value); setPage(1); }}
           className="rounded-lg border border-border bg-card-bg px-3 py-2 text-sm text-foreground outline-none focus:border-accent">
@@ -106,7 +182,7 @@ export default function AdminMangaPage() {
         </select>
       </div>
 
-      {error && <div className="mb-4 rounded-lg border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">⚠️ {error}</div>}
+      {error && <div className="mb-4 rounded-lg border border-red-800/40 bg-red-900/20 px-4 py-3 text-sm text-red-400">Error: {error}</div>}
 
       <div className="rounded-xl border border-border bg-card-bg overflow-hidden">
         <div className="overflow-x-auto">
@@ -151,12 +227,12 @@ export default function AdminMangaPage() {
                     <td className="px-4 py-3">
                       <button onClick={() => handleToggleStatus(manga)} disabled={togglingId === manga.id}
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-colors hover:opacity-80 disabled:opacity-50 ${STATUS_COLORS[manga.status ?? ""] ?? "bg-border text-muted"}`}>
-                        {togglingId === manga.id ? "..." : manga.status ?? "—"}
+                        {togglingId === manga.id ? "..." : manga.status ?? "-"}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-center text-muted">{manga.total_chapters ?? "—"}</td>
+                    <td className="px-4 py-3 text-center text-muted">{manga.total_chapters ?? "-"}</td>
                     <td className="px-4 py-3 text-xs text-muted">
-                      {manga.storage?.name ?? manga.storage?.remote_name ?? (manga.storage_id ? `#${manga.storage_id}` : "—")}
+                      {manga.storage?.name ?? manga.storage?.remote_name ?? (manga.storage_id ? `#${manga.storage_id}` : "-")}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
@@ -173,6 +249,20 @@ export default function AdminMangaPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </Link>
+                        {/* Tombol ambil cover dari GDrive per-manga — hanya jika belum ada cover */}
+                        {!manga.cover_url && (
+                          <button
+                            onClick={() => handleFetchCoverFromGdrive(manga)}
+                            disabled={fetchingCoverId === manga.id}
+                            className="rounded-lg p-1.5 text-emerald-400 hover:bg-emerald-900/20 disabled:opacity-50"
+                            title="Ambil cover dari GDrive backup"
+                          >
+                            {fetchingCoverId === manga.id
+                              ? <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                              : <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                            }
+                          </button>
+                        )}
                         <button onClick={() => handleDelete(manga)} disabled={deletingId === manga.id}
                           className="rounded-lg p-1.5 text-red-400 hover:bg-red-900/20 disabled:opacity-50" title="Hapus">
                           {deletingId === manga.id
@@ -192,9 +282,9 @@ export default function AdminMangaPage() {
             <p className="text-xs text-muted">Halaman {page} dari {totalPages} · Total {total} manga</p>
             <div className="flex gap-2">
               <button onClick={() => setPage((p) => p - 1)} disabled={page <= 1}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:border-accent hover:text-accent disabled:opacity-30">← Prev</button>
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:border-accent hover:text-accent disabled:opacity-30">Prev</button>
               <button onClick={() => setPage((p) => p + 1)} disabled={page >= totalPages}
-                className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:border-accent hover:text-accent disabled:opacity-30">Next →</button>
+                className="rounded-lg border border-border px-3 py-1.5 text-xs text-foreground hover:border-accent hover:text-accent disabled:opacity-30">Next</button>
             </div>
           </div>
         )}

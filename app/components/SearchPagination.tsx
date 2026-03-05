@@ -22,7 +22,8 @@ export default function SearchPagination({
         return `/search?${params.toString()}`;
     }
 
-    const pages: (number | string)[] = [];
+    // Build page list: 1, 2, ...(near current)..., last
+    const pages: (number | "...")[] = [];
     const delta = 2;
     for (let i = 1; i <= totalPages; i++) {
         if (
@@ -57,13 +58,13 @@ export default function SearchPagination({
             {/* Pages */}
             {pages.map((page, idx) =>
                 page === "..." ? (
-                    <span key={`dots-${idx}`} className="px-2 text-sm text-muted">
+                    <span key={`dots-${idx}`} className="px-1 text-sm text-gray-400">
                         ...
                     </span>
                 ) : (
                     <Link
                         key={page}
-                        href={buildHref(page as number)}
+                        href={buildHref(page)}
                         className={page === currentPage ? activeLink : linkBase}
                     >
                         {page}

@@ -5,18 +5,24 @@ import { useRouter } from "next/navigation";
 import {
   uploadSmartImport,
   fetchSmartImportExample,
-  fetchUploadProgress,
+  fetchSmartImportStatus,
 } from "@/app/lib/upload-api";
 import { fetchMangaTypes, type MangaType } from "@/app/lib/api";
 
 interface ProgressEntry {
-  upload_id: string;
+  upload_id: string;       // Smart import job_id
   filename: string;
-  status: string;
-  progress: number;
-  current_file?: string;
+  status: string;          // queued | running | completed | failed | error
+  progress: number;        // 0-100
+  // Granular progress dari _smart_import_jobs:
+  message?: string;
+  current_manga?: string;
+  current_chapter?: string;
+  manga_index?: number;
+  total_manga?: number;
+  total_chapters?: number;
   total_files?: number;
-  processed_files?: number;
+  completed_files?: number;
   errors?: string[];
   result?: Record<string, unknown>;
   startedAt: number;
@@ -82,24 +88,29 @@ export default function SmartImportPage() {
   }, []);
 
   // ── Poll progress for one upload_id ─────────────────────────
-  const startPolling = useCallback((upload_id: string) => {
-    if (pollingRefs.current[upload_id]) return;
+  const startPolling = useCallback((job_id: string) => {
+    if (pollingRefs.current[job_id]) return;
 
     const interval = setInterval(async () => {
       try {
-        const data = await fetchUploadProgress(upload_id);
+        const data = await fetchSmartImportStatus(job_id);
 
         setProgresses((prev) =>
           prev.map((p) =>
-            p.upload_id === upload_id
+            p.upload_id === job_id
               ? {
                 ...p,
                 status: data.status,
-                progress: data.progress,
-                current_file: data.current_file,
+                progress: data.progress ?? p.progress,
+                message: data.message,
+                current_manga: data.current_manga,
+                current_chapter: data.current_chapter,
+                manga_index: data.manga_index,
+                total_manga: data.total_manga,
+                total_chapters: data.total_chapters,
                 total_files: data.total_files,
-                processed_files: data.processed_files,
-                errors: data.errors,
+                completed_files: data.completed_files,
+                result: data.result ?? p.result,
               }
               : p
           )
@@ -112,14 +123,14 @@ export default function SmartImportPage() {
 
         if (done) {
           clearInterval(interval);
-          delete pollingRefs.current[upload_id];
+          delete pollingRefs.current[job_id];
         }
       } catch {
         clearInterval(interval);
-        delete pollingRefs.current[upload_id];
+        delete pollingRefs.current[job_id];
         setProgresses((prev) =>
           prev.map((p) =>
-            p.upload_id === upload_id
+            p.upload_id === job_id
               ? { ...p, status: "error", errors: ["Gagal mengambil progress"] }
               : p
           )
@@ -127,7 +138,7 @@ export default function SmartImportPage() {
       }
     }, 1500);
 
-    pollingRefs.current[upload_id] = interval;
+    pollingRefs.current[job_id] = interval;
   }, []);
 
   // ── Handle Example ───────────────────────────────────────────
@@ -196,8 +207,10 @@ export default function SmartImportPage() {
         return;
       }
 
-      // ── Actual import: progress tracking ──────────────────
-      const upload_id =
+      // ── Actual import: Start polling job_id ──────────────────
+      // Smart import kembalikan job_id (bukan upload_id)
+      const job_id =
+        (res?.job_id as string) ||
         (res?.upload_id as string) ||
         (res?.id as string) ||
         tempId;
@@ -207,17 +220,18 @@ export default function SmartImportPage() {
           p.upload_id === tempId
             ? {
               ...p,
-              upload_id,
-              status: (res?.status as string) ?? "processing",
-              progress: (res?.progress as number) ?? 10,
+              upload_id: job_id,
+              status: (res?.status as string) ?? "queued",
+              progress: 0,
+              message: (res?.message as string) ?? "Antrian dimulai...",
               result: res,
             }
             : p
         )
       );
 
-      if (upload_id && upload_id !== tempId) {
-        startPolling(upload_id);
+      if (job_id && job_id !== tempId) {
+        startPolling(job_id);
       } else {
         setProgresses((prev) =>
           prev.map((p) =>
@@ -716,18 +730,40 @@ function ProgressCard({
         />
       </div>
 
-      {/* Stats */}
+      {/* Stats: files & current chapter */}
       <div className="flex items-center justify-between text-xs text-muted">
         <span>{entry.progress}%</span>
-        {entry.total_files && (
+        {entry.total_files !== undefined && (
           <span>
-            {entry.processed_files ?? 0} / {entry.total_files} file
+            {entry.completed_files ?? 0} / {entry.total_files} file
           </span>
         )}
-        {entry.current_file && !isDone && (
-          <span className="max-w-[140px] truncate">{entry.current_file}</span>
+        {entry.manga_index !== undefined && entry.total_manga !== undefined && !isDone && (
+          <span className="text-accent">
+            manga {entry.manga_index}/{entry.total_manga}
+          </span>
         )}
       </div>
+
+      {/* Current chapter being uploaded */}
+      {entry.current_chapter && !isDone && (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted">
+          <svg className="h-3 w-3 animate-spin text-yellow-400 flex-shrink-0" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <span className="truncate">
+            {entry.current_manga && <span className="text-accent">{entry.current_manga}</span>}
+            {entry.current_manga && entry.current_chapter && " — "}
+            {entry.current_chapter}
+          </span>
+        </div>
+      )}
+
+      {/* Message (e.g. "[1/3] Memproses: One Piece") */}
+      {entry.message && !isDone && (
+        <p className="mt-1 text-[11px] text-muted italic truncate">{entry.message}</p>
+      )}
 
       {/* Summary badge on complete */}
       {entry.status === "completed" && totalManga !== undefined && (

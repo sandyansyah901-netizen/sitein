@@ -59,7 +59,7 @@ export interface Manga {
   }>;
   updated_at?: string;
   created_at?: string;
-  alt_titles?: string[];
+  alt_titles?: { title: string; lang: string }[];
 }
 
 export interface Chapter {

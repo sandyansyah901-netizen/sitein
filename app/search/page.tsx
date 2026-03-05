@@ -24,7 +24,7 @@ export async function generateMetadata({
 export default async function SearchPage({ searchParams }: SearchPageProps) {
     const { search, page } = await searchParams;
     const currentPage = Math.max(1, parseInt(page ?? "1", 10));
-    const PAGE_SIZE = 24;
+    const PAGE_SIZE = 20;
 
     const result = await fetchMangaList({
         search: search ?? "",
@@ -78,15 +78,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                         </div>
 
                         {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="mt-8">
-                                <SearchPagination
-                                    currentPage={currentPage}
-                                    totalPages={totalPages}
-                                    search={search ?? ""}
-                                />
-                            </div>
-                        )}
+                        <div className="mt-8">
+                            <SearchPagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                search={search ?? ""}
+                            />
+                        </div>
                     </>
                 ) : (
                     /* Empty state */

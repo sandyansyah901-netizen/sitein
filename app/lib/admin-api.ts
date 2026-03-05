@@ -253,6 +253,25 @@ export interface DaemonHealth {
   [key: string]: unknown;
 }
 
+export interface WorkerPortRemote {
+  remote: string;
+  group: number;
+  port: number;
+  alive: boolean;
+}
+
+export interface WorkerPortEntry {
+  worker_index: number;
+  port_base: number;
+  remotes: WorkerPortRemote[];
+}
+
+export interface WorkersConfig {
+  num_workers: number;
+  port_slots: number;
+  base_port: number;
+}
+
 export interface GroupsStatus {
   active_upload_group: number;
   auto_switch_enabled: boolean;
@@ -264,6 +283,8 @@ export interface GroupsStatus {
     groups: Record<string, GroupQuotaItem>;
   };
   daemon_health: DaemonHealth;
+  all_workers_ports?: WorkerPortEntry[];
+  workers_config?: WorkersConfig;
   [key: string]: unknown;
 }
 
@@ -329,6 +350,57 @@ export interface GdriveUsageResult {
   groups: Record<string, GdriveGroupUsage>;
   total_remotes_queried: number;
   fetched_at: string;
+}
+
+// ── Server Info (Multi-VPS) ───────────────────────────────────────────────────
+
+export interface ServerInfo {
+  is_secondary: boolean;
+  server_role: "main" | "secondary";
+  server_label: string; // "Server Utama" | "Server Tambahan"
+  cover_main_server_url: string | null;
+  cover_served_by: "local" | "main_server";
+  worker_index: number;
+  environment: string;
+  version: string;
+}
+
+export async function fetchServerInfo(): Promise<ServerInfo> {
+  return adminFetch(`${API_BASE_URL}/server-info`) as Promise<ServerInfo>;
+}
+
+// ── ImgURL Token Types ─────────────────────────────────────────────────────
+
+export interface ImgUrlToken {
+  id: number;
+  token_preview: string;
+  label: string | null;
+  is_active: boolean;
+  daily_limit: number;
+  usage_today: number;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ImgUrlTokensResponse {
+  tokens: ImgUrlToken[];
+  total: number;
+  active: number;
+  rotation_index: number;
+}
+
+export interface ImgUrlTokenQuota {
+  success: boolean;
+  token_id: number;
+  label: string | null;
+  token_preview: string;
+  username?: string;
+  email?: string;
+  upload_count?: number;
+  upload_today?: number;
+  storage_used?: number;
+  storage_limit?: number;
+  error?: string;
 }
 
 export interface CacheStats {
@@ -634,6 +706,33 @@ export async function adminToggleMangaStatus(
     `${API_BASE_URL}/admin/manga/${mangaId}/status?new_status=${encodeURIComponent(newStatus)}`,
     { method: "PUT" }
   );
+}
+
+// POST /admin/manga/{manga_id}/cover/fetch-gdrive
+export async function adminFetchCoverFromGdrive(mangaId: number): Promise<{
+  success: boolean;
+  message: string;
+  cover_url: string;
+  cover_path: string;
+}> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/manga/${mangaId}/cover/fetch-gdrive`,
+    { method: "POST" }
+  ) as Promise<{ success: boolean; message: string; cover_url: string; cover_path: string }>;
+}
+
+// POST /admin/covers/sync-from-gdrive — download SEMUA cover dari GDrive ke local
+export async function adminSyncAllCoversFromGdrive(): Promise<{
+  success: boolean;
+  message?: string;
+  downloaded: number;
+  failed: number;
+  results?: Array<{ manga_slug: string; status: string; path?: string; error?: string }>;
+}> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/covers/sync-from-gdrive`,
+    { method: "POST" }
+  ) as Promise<{ success: boolean; message?: string; downloaded: number; failed: number; results?: Array<{ manga_slug: string; status: string; path?: string; error?: string }> }>;
 }
 
 // POST /admin/manga/{manga_id}/cover — multipart/form-data
@@ -1424,4 +1523,53 @@ export async function reloadImgurlTokens(): Promise<ImgurlTokenStatus> {
     throw new Error((err as Record<string, string>)?.detail || `API error: ${res.status}`);
   }
   return res.json() as Promise<ImgurlTokenStatus>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMGURL TOKEN MANAGEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function fetchImgUrlTokens(): Promise<ImgUrlTokensResponse> {
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens`) as Promise<ImgUrlTokensResponse>;
+}
+
+export async function createImgUrlToken(
+  token: string,
+  label?: string,
+  dailyLimit?: number
+): Promise<unknown> {
+  const sp = new URLSearchParams({ token });
+  if (label) sp.set("label", label);
+  if (dailyLimit !== undefined) sp.set("daily_limit", String(dailyLimit));
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens?${sp}`, { method: "POST" });
+}
+
+export async function updateImgUrlToken(
+  tokenId: number,
+  data: { label?: string; is_active?: boolean; daily_limit?: number }
+): Promise<unknown> {
+  const sp = new URLSearchParams();
+  if (data.label !== undefined) sp.set("label", data.label);
+  if (data.is_active !== undefined) sp.set("is_active", String(data.is_active));
+  if (data.daily_limit !== undefined) sp.set("daily_limit", String(data.daily_limit));
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens/${tokenId}?${sp}`, { method: "PUT" });
+}
+
+export async function deleteImgUrlToken(tokenId: number): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens/${tokenId}`, { method: "DELETE" });
+}
+
+export async function checkImgUrlTokenQuota(tokenId: number): Promise<ImgUrlTokenQuota> {
+  return adminFetch(
+    `${API_BASE_URL}/admin/imgurl/tokens/${tokenId}/check-quota`,
+    { method: "POST" }
+  ) as Promise<ImgUrlTokenQuota>;
+}
+
+export async function reloadImgUrlTokens(): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens/reload`, { method: "POST" });
+}
+
+export async function migrateImgUrlTokensFromFile(): Promise<unknown> {
+  return adminFetch(`${API_BASE_URL}/admin/imgurl/tokens/migrate-from-file`, { method: "POST" });
 }

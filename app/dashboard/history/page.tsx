@@ -8,13 +8,11 @@ import {
     type ReadingHistoryItem,
     type Pagination,
 } from "@/app/lib/user-api";
-import { Trash2, BookOpen } from "lucide-react";
+import { Trash2, BookOpen, PlayCircle } from "lucide-react";
 import Link from "next/link";
-import { mangaHref } from "@/app/lib/utils";
+import { mangaHref, toSeoSlug } from "@/app/lib/utils";
 
 function formatDateTime(dateString: string): string {
-    // Backend returns naive UTC timestamps like "2026-02-25T14:15:08"
-    // We must append "Z" to force the browser to parse it as UTC, not local time.
     const normalized = dateString.endsWith("Z") ? dateString : `${dateString}Z`;
     const date = new Date(normalized);
     return date.toLocaleString("id-ID", {
@@ -29,6 +27,36 @@ function formatDateTime(dateString: string): string {
 function normalizeCover(url: string | null | undefined): string {
     if (!url) return "/placeholder-cover.jpg";
     try { return new URL(url).pathname; } catch { return url.startsWith("/") ? url : `/${url}`; }
+}
+
+/**
+ * Buat URL resume chapter: /{type}/{mangaSlug}/chapter/{chNum}?page=N
+ * chapter_slug contoh: "one-piece-chapter-10" atau "one-piece-chapter-10-5"
+ * Output: "/manga/one-piece-bahasa-indonesia/chapter/010?page=17"
+ */
+function chapterResumeHref(
+    typeSlug: string | undefined | null,
+    mangaSlug: string,
+    chapterSlug: string,
+    pageNumber: number
+): string {
+    const type = typeSlug || "manga"; // fallback kalau manga_type_slug undefined
+    // Strip prefix "{mangaSlug}-chapter-" dari chapter_slug
+    const prefix = `${mangaSlug}-chapter-`;
+    const chPart = chapterSlug.startsWith(prefix)
+        ? chapterSlug.slice(prefix.length)
+        : chapterSlug;
+
+    // chPart bisa "10" atau "10-5"
+    const parts = chPart.split("-");
+    const main = parseInt(parts[0], 10) || 0;
+    const sub = parts[1] ? parseInt(parts[1], 10) : 0;
+
+    const padMain = String(main).padStart(3, "0");
+    const chNum = sub > 0 ? `${padMain}-${String(sub).padStart(2, "0")}` : padMain;
+
+    const base = `/${type}/${toSeoSlug(mangaSlug)}/chapter/${chNum}`;
+    return pageNumber > 1 ? `${base}?page=${pageNumber}` : base;
 }
 
 export default function HistoryPage() {
@@ -119,6 +147,12 @@ export default function HistoryPage() {
                         {items.map((item) => {
                             const progress = Math.round((item.page_number / item.total_pages) * 100);
                             const href = mangaHref(item.manga_type_slug, item.manga_slug);
+                            const resumeHref = chapterResumeHref(
+                                item.manga_type_slug,
+                                item.manga_slug,
+                                item.chapter_slug,
+                                item.page_number
+                            );
                             return (
                                 <div
                                     key={`${item.manga_slug}-${item.chapter_slug}`}
@@ -152,6 +186,14 @@ export default function HistoryPage() {
                                                 style={{ width: `${progress}%` }}
                                             />
                                         </div>
+                                        {/* Lanjutkan baca */}
+                                        <Link
+                                            href={resumeHref}
+                                            className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-semibold text-[#E50914] hover:underline"
+                                        >
+                                            <PlayCircle className="w-3 h-3" />
+                                            Lanjutkan baca
+                                        </Link>
                                     </div>
 
                                     {/* Meta + Delete */}

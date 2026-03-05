@@ -17,6 +17,8 @@ import {
 import { saveReadingProgress } from "@/app/lib/user-api";
 import { useAuth } from "@/app/lib/auth";
 import { fromSeoSlug, toSeoSlug } from "@/app/lib/utils";
+import ChapterReactions from "@/app/components/ChapterReactions";
+import CommentSection from "@/app/components/CommentSection";
 
 interface PageProps {
   params: Promise<{
@@ -46,6 +48,15 @@ export default function ChapterReaderPage({ params }: PageProps) {
   const [autoScroll, setAutoScroll] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const { token, isLoggedIn } = useAuth();
+  const [resumePage, setResumePage] = useState(0);  // ?page=N dari history link
+  const hasScrolled = useRef(false);  // scroll hanya 1x per page load
+
+  // Baca ?page=N dari URL tanpa useSearchParams (menghindari Suspense requirement)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const p = parseInt(params.get("page") ?? "0", 10);
+    if (p > 1) setResumePage(p);
+  }, []);
   const lastSavedPage = useRef(0);
   const lastScrollY = useRef(0);
   const autoScrollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -208,6 +219,23 @@ export default function ChapterReaderPage({ params }: PageProps) {
     const t = setTimeout(() => setPagesReady(true), 0);
     return () => clearTimeout(t);
   }, [chapterDetail, mangaDetail]);
+
+  // ✅ Auto-scroll ke halaman tersimpan saat datang dari reading history (?page=N)
+  useEffect(() => {
+    if (!pagesReady) return;
+    if (!resumePage || resumePage <= 1) return;
+    if (hasScrolled.current) return; // hanya 1x per page load
+    hasScrolled.current = true;
+
+    // Cari elemen [data-page="N"] — sudah di DOM karena pagesReady=true
+    const target = document.querySelector<HTMLElement>(`[data-page="${resumePage}"]`);
+    if (target) {
+      // Sedikit delay agar gambar sudah mulai render, sehingga posisi scroll akurat
+      setTimeout(() => {
+        target.scrollIntoView({ behavior: "instant", block: "start" });
+      }, 200);
+    }
+  }, [pagesReady, resumePage]);
 
   // IntersectionObserver: track halaman mana yang sedang dilihat user
   useEffect(() => {
@@ -636,6 +664,12 @@ export default function ChapterReaderPage({ params }: PageProps) {
           </Link>
         </div>
       )}
+
+      {/* ===== EMOJI REACTIONS ===== */}
+      <ChapterReactions chapterSlug={chapterDetail.slug} />
+
+      {/* ===== CHAPTER COMMENTS ===== */}
+      <CommentSection collectionType="chapter" slug={chapterDetail.slug} />
 
       {/* Bottom spacer */}
       <div className="pb-28" />

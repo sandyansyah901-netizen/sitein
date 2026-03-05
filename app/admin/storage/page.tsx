@@ -9,6 +9,7 @@ import {
   adminTestStorage,
   adminToggleStorageStatus,
   fetchGdriveUsage,
+  fetchServerInfo,
   type GroupsStatus,
   type GroupsQuota,
   type GroupQuotaItem,
@@ -17,6 +18,9 @@ import {
   type StorageTestResult,
   type GdriveUsageResult,
   type GdriveRemoteUsage,
+  type WorkerPortEntry,
+  type WorkersConfig,
+  type ServerInfo,
 } from "@/app/lib/admin-api";
 
 function JsonTree({ data }: { data: unknown }) {
@@ -134,11 +138,96 @@ function getSourceName(src: StorageSource): string {
   return (src.source_name ?? src.name ?? src.remote_name ?? `Storage ${src.id}`) as string;
 }
 
+// ── AllWorkersPortsTable ──────────────────────────────────────────────────────
+function AllWorkersPortsTable({
+  workers,
+  config,
+}: {
+  workers: WorkerPortEntry[];
+  config?: WorkersConfig;
+}) {
+  const aliveCount = workers.reduce(
+    (acc, w) => acc + w.remotes.filter((r) => r.alive).length,
+    0
+  );
+  const totalCount = workers.reduce((acc, w) => acc + w.remotes.length, 0);
+
+  // Unique remote names (column headers)
+  const remoteNames =
+    workers[0]?.remotes.map((r) => ({ name: r.remote, group: r.group })) ?? [];
+
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-card-bg p-6">
+      <div className="mb-4 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="font-semibold text-foreground">All Workers Port Matrix</h2>
+          <p className="text-[10px] text-muted">
+            {config
+              ? `${config.num_workers} workers × ${remoteNames.length} remotes · base port ${config.base_port} · slot size ${config.port_slots}`
+              : "Port formula: BASE + (WORKER_INDEX × SLOT) + remote_index"}
+          </p>
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${aliveCount === totalCount
+            ? "bg-emerald-500/10 text-emerald-400"
+            : aliveCount === 0
+              ? "bg-red-500/10 text-red-400"
+              : "bg-yellow-500/10 text-yellow-400"
+            }`}
+        >
+          {aliveCount}/{totalCount} ports alive
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="pb-2 pr-4 text-left text-[10px] font-semibold uppercase tracking-wider text-muted">Worker</th>
+              <th className="pb-2 pr-4 text-left text-[10px] font-semibold uppercase tracking-wider text-muted">Port Base</th>
+              {remoteNames.map((r) => (
+                <th key={r.name} className="pb-2 px-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted">
+                  <span className="font-mono">{r.name}</span>
+                  <span className="ml-1 text-muted/60">G{r.group}</span>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {workers.map((w) => (
+              <tr key={w.worker_index} className="hover:bg-background/20">
+                <td className="py-2 pr-4 font-semibold text-foreground">
+                  Worker {w.worker_index}
+                </td>
+                <td className="py-2 pr-4 font-mono text-muted">{w.port_base}</td>
+                {w.remotes.map((r) => (
+                  <td key={r.remote} className="py-2 px-2 text-center">
+                    <div className="inline-flex flex-col items-center gap-0.5">
+                      <span className="font-mono text-foreground">{r.port}</span>
+                      <span
+                        className={`text-[9px] font-semibold ${r.alive ? "text-emerald-400" : "text-red-400"
+                          }`}
+                      >
+                        {r.alive ? "✅ UP" : "❌ DOWN"}
+                      </span>
+                    </div>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminStoragePage() {
   const [sources, setSources] = useState<StorageSource[]>([]);
   const [status, setStatus] = useState<GroupsStatus | null>(null);
   const [quota, setQuota] = useState<GroupsQuota | null>(null);
   const [gdriveUsage, setGdriveUsage] = useState<GdriveUsageResult | null>(null);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isLoadingStatus, setIsLoadingStatus] = useState(true);
   const [isLoadingQuota, setIsLoadingQuota] = useState(true);
@@ -178,6 +267,11 @@ export default function AdminStoragePage() {
       .then(setQuota)
       .catch((e) => setQuotaError(e instanceof Error ? e.message : "Gagal memuat quota"))
       .finally(() => setIsLoadingQuota(false));
+
+    // Fetch server info (silently fail — tidak kritis)
+    fetchServerInfo()
+      .then(setServerInfo)
+      .catch(() => { /* ignore */ });
   };
 
   const handleRefreshGdriveUsage = async () => {
@@ -252,7 +346,51 @@ export default function AdminStoragePage() {
         <p className="mt-1 text-sm text-muted">Monitor dan kontrol Google Drive storage</p>
       </div>
 
-      {/* ── Group Overview Cards ──────────────────────────────────────────── */}
+      {/* ── VPS Server Info Panel ─────────────────────────────────────────── */}
+      {serverInfo && (
+        <div className={`mb-6 rounded-xl border p-4 flex flex-wrap items-center justify-between gap-3 ${serverInfo.is_secondary
+            ? "border-yellow-700/40 bg-yellow-900/10"
+            : "border-emerald-700/40 bg-emerald-900/10"
+          }`}>
+          <div className="flex items-center gap-3">
+            {/* Server role badge */}
+            <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg font-bold ${serverInfo.is_secondary
+                ? "bg-yellow-500/20 text-yellow-300"
+                : "bg-emerald-500/20 text-emerald-300"
+              }`}>
+              {serverInfo.is_secondary ? "2" : "1"}
+            </span>
+            <div>
+              <p className="font-semibold text-foreground text-sm">
+                {serverInfo.server_label}
+                <span className={`ml-2 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${serverInfo.is_secondary
+                    ? "bg-yellow-500/15 text-yellow-400"
+                    : "bg-emerald-500/15 text-emerald-400"
+                  }`}>
+                  {serverInfo.server_role}
+                </span>
+              </p>
+              <p className="text-xs text-muted mt-0.5">
+                {serverInfo.is_secondary
+                  ? <>Cover redirect → <span className="font-mono text-yellow-300">{serverInfo.cover_main_server_url}</span></>
+                  : "Cover disimpan & diserve lokal di server ini"}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 text-[10px]">
+            <span className="rounded bg-border px-2 py-1 font-mono text-muted">
+              env: {serverInfo.environment}
+            </span>
+            <span className="rounded bg-border px-2 py-1 font-mono text-muted">
+              v{serverInfo.version}
+            </span>
+            <span className="rounded bg-border px-2 py-1 font-mono text-muted">
+              worker #{serverInfo.worker_index}
+            </span>
+          </div>
+        </div>
+      )}
+
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {isLoadingStatus ? (
           Array.from({ length: 2 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-border" />)
@@ -297,6 +435,14 @@ export default function AdminStoragePage() {
             ))}
           </div>
         </div>
+      )}
+
+      {/* ── All Workers Port Matrix ──────────────────────────────────────── */}
+      {status?.all_workers_ports && status.all_workers_ports.length > 0 && (
+        <AllWorkersPortsTable
+          workers={status.all_workers_ports}
+          config={status.workers_config}
+        />
       )}
 
       {/* ── Manual Switch Active Group ────────────────────────────────────── */}
@@ -537,8 +683,8 @@ export default function AdminStoragePage() {
                             onClick={() => handleToggle(src)}
                             disabled={togglingId === src.id}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${isActive
-                                ? "border border-yellow-800/40 text-yellow-400 hover:bg-yellow-900/20"
-                                : "border border-emerald-800/40 text-emerald-400 hover:bg-emerald-900/20"
+                              ? "border border-yellow-800/40 text-yellow-400 hover:bg-yellow-900/20"
+                              : "border border-emerald-800/40 text-emerald-400 hover:bg-emerald-900/20"
                               }`}
                           >
                             {togglingId === src.id ? "..." : isActive ? "Suspend" : "Activate"}

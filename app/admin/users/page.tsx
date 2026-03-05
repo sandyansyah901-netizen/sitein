@@ -11,8 +11,10 @@ import {
   adminToggleUserStatus,
   adminDeleteUser,
   fetchAdminRoles,
+  fetchServerInfo,
   type AdminUser,
   type AdminRole,
+  type ServerInfo,
 } from "@/app/lib/admin-api";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -408,6 +410,7 @@ export default function AdminUsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [availableRoles, setAvailableRoles] = useState<AdminRole[]>([]);
+  const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null);
 
   // Modal
   const [editUser, setEditUser] = useState<AdminUser | null>(null);
@@ -452,6 +455,13 @@ export default function AdminUsersPage() {
     fetchAdminRoles()
       .then((r) => setAvailableRoles(Array.isArray(r) ? r : []))
       .catch(() => { });
+  }, []);
+
+  // Fetch server info for displaying current VPS
+  useEffect(() => {
+    fetchServerInfo()
+      .then(setServerInfo)
+      .catch(() => { /* ignore */ });
   }, []);
 
   const openEdit = (user: AdminUser, field: EditField) => {
@@ -509,6 +519,26 @@ export default function AdminUsersPage() {
             Total <span className="font-semibold text-foreground">{total}</span> user terdaftar
           </p>
         </div>
+        {/* Server badge */}
+        {serverInfo && (
+          <div className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 ${serverInfo.is_secondary
+              ? "border-yellow-700/40 bg-yellow-900/10"
+              : "border-emerald-700/40 bg-emerald-900/10"
+            }`}>
+            <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${serverInfo.is_secondary
+                ? "bg-yellow-500/20 text-yellow-300"
+                : "bg-emerald-500/20 text-emerald-300"
+              }`}>
+              {serverInfo.is_secondary ? "2" : "1"}
+            </span>
+            <div>
+              <p className="text-xs font-semibold text-foreground">{serverInfo.server_label}</p>
+              <p className="text-[10px] text-muted">
+                {serverInfo.is_secondary ? "DB → Server Utama" : "DB lokal"}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Filter bar */}
@@ -569,6 +599,7 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Roles</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Status</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Bergabung</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted">Server</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted">Aksi</th>
               </tr>
             </thead>
@@ -623,6 +654,20 @@ export default function AdminUsersPage() {
                       {new Date(user.created_at).toLocaleDateString("id-ID", {
                         day: "numeric", month: "short", year: "numeric",
                       })}
+                    </td>
+                    {/* ✅ Server column */}
+                    <td className="px-4 py-3">
+                      {serverInfo ? (
+                        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold ${serverInfo.is_secondary
+                            ? "bg-yellow-500/10 text-yellow-400"
+                            : "bg-emerald-500/10 text-emerald-400"
+                          }`}>
+                          <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                          {serverInfo.is_secondary ? "Server 2" : "Server 1"}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end">

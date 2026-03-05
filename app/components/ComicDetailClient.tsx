@@ -11,11 +11,13 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
+  PlayCircle,
 } from "lucide-react";
 import type { Manga, Chapter } from "@/app/lib/api";
-import { addBookmark, removeBookmark, checkBookmark, addToReadingList } from "@/app/lib/user-api";
+import { addBookmark, removeBookmark, checkBookmark, addToReadingList, getLastReadChapter, type LastReadResponse } from "@/app/lib/user-api";
 import { useAuth } from "@/app/lib/auth";
 import { toSeoSlug, mangaHref } from "@/app/lib/utils";
+import CommentSection from "@/app/components/CommentSection";
 
 interface Props {
   manga: Manga;
@@ -49,11 +51,13 @@ export default function ComicDetailClient({
 }: Props) {
   const router = useRouter();
   const { token, isLoggedIn } = useAuth();
-  const [activeTab, setActiveTab] = useState<"home" | "info" | "news">("home");
+  const [activeTab, setActiveTab] = useState<"home" | "info" | "news" | "diskusi">("home");
   const [bookmarked, setBookmarked] = useState(false);
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [lastReadHref, setLastReadHref] = useState<string | null>(null);
+  const [lastReadLabel, setLastReadLabel] = useState<string | null>(null);
 
   // Cek status bookmark saat mount
   useEffect(() => {
@@ -62,6 +66,30 @@ export default function ComicDetailClient({
       .then((res) => setBookmarked(res.is_bookmarked))
       .catch(() => { });
   }, [token, isLoggedIn, manga.slug]);
+
+  // Fetch last read chapter untuk floating bottom
+  useEffect(() => {
+    if (!token || !isLoggedIn) return;
+    getLastReadChapter(token, manga.slug)
+      .then((res: LastReadResponse | null) => {
+        if (!res) return;
+        // Build chapter num string
+        // chapter_slug format: "{manga_slug}-chapter-{num}" → extract and pad
+        const slug = res.chapter_slug;
+        const prefix = `${manga.slug}-chapter-`;
+        const chPart = slug.startsWith(prefix) ? slug.slice(prefix.length) : slug;
+        const parts = chPart.split("-");
+        const main = parseInt(parts[0], 10) || 0;
+        const sub = parts[1] ? parseInt(parts[1], 10) : 0;
+        const padMain = String(main).padStart(3, "0");
+        const chNum = sub > 0 ? `${padMain}-${String(sub).padStart(2, "0")}` : padMain;
+        const href = `/${typeSlug}/${toSeoSlug(manga.slug)}/chapter/${chNum}?page=${res.page_number}`;
+        setLastReadHref(href);
+        setLastReadLabel(res.chapter_label);
+      })
+      .catch(() => { }); // silent — user might not have history
+  }, [token, isLoggedIn, manga.slug, typeSlug]);
+
 
   const sortedChapters = [...chapters].sort((a, b) => {
     const diff = a.chapter_main - b.chapter_main || a.chapter_sub - b.chapter_sub;
@@ -80,6 +108,18 @@ export default function ComicDetailClient({
 
   return (
     <div className="max-w-[600px] mx-auto">
+      {/* ── Floating Bottom Bar (Lanjutkan Membaca) ── */}
+      {lastReadHref && (
+        <div className="fixed bottom-5 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+          <Link
+            href={lastReadHref}
+            className="pointer-events-auto flex items-center gap-2.5 bg-[#E50914] hover:bg-[#c1070f] active:scale-95 text-white font-bold text-[13px] px-5 py-3 rounded-full shadow-lg shadow-red-500/30 transition-all duration-200"
+          >
+            <PlayCircle className="w-4 h-4 shrink-0" />
+            <span>Lanjutkan — {lastReadLabel}</span>
+          </Link>
+        </div>
+      )}
       {/* Back button (mobile) */}
       <div className="md:hidden flex items-center gap-2 px-4 py-3">
         <button
@@ -127,7 +167,7 @@ export default function ComicDetailClient({
           {/* Alt title */}
           {manga.alt_titles && manga.alt_titles.length > 0 && (
             <p className="text-[11px] italic text-gray-500 dark:text-gray-400 text-center mb-2">
-              {manga.alt_titles[0]}
+              {manga.alt_titles[0].title}
             </p>
           )}
 
@@ -231,8 +271,8 @@ export default function ComicDetailClient({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 px-3 sm:px-0 pt-4">
-        {(["home", "info", "news"] as const).map((tab) => (
+      <div className="flex gap-2 px-3 sm:px-0 pt-4 flex-wrap">
+        {(["home", "info", "news", "diskusi"] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -241,7 +281,7 @@ export default function ComicDetailClient({
               : "border border-gray-300 dark:border-[#333] text-[#555] dark:text-gray-400 hover:border-[#E50914] hover:text-[#E50914]"
               }`}
           >
-            {tab === "home" ? "Episodes" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tab === "home" ? "Episodes" : tab === "diskusi" ? "💬 Diskusi" : tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>
@@ -385,7 +425,7 @@ export default function ComicDetailClient({
               </p>
               <div className="flex flex-col gap-2.5">
                 {manga.alt_titles && manga.alt_titles.length > 0 && (
-                  <DetailRow label="Alternative Title" value={manga.alt_titles.join(", ")} />
+                  <DetailRow label="Alternative Title" value={manga.alt_titles.map(a => a.title).join(", ")} />
                 )}
                 {manga.genres && manga.genres.length > 0 && (
                   <DetailRow
@@ -423,6 +463,13 @@ export default function ComicDetailClient({
             <p className="text-[11px] text-gray-400">
               Check back later for updates about this series.
             </p>
+          </div>
+        )}
+
+        {/* DISKUSI tab */}
+        {activeTab === "diskusi" && (
+          <div className="-mx-3 sm:-mx-0">
+            <CommentSection collectionType="manga" slug={manga.slug} />
           </div>
         )}
       </div>

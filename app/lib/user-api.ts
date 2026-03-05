@@ -152,6 +152,34 @@ export async function deleteReadingHistory(
     await handleResponse(res);
 }
 
+export interface LastReadResponse {
+    manga_slug: string;
+    chapter_id: number;
+    chapter_slug: string;
+    chapter_label: string;
+    page_number: number;
+    total_pages: number;
+    last_read_at: string;
+    next_chapter: {
+        id: number;
+        chapter_label: string;
+        slug: string;
+    } | null;
+}
+
+/** Get last read chapter for a manga. Returns null if no history. */
+export async function getLastReadChapter(
+    token: string,
+    mangaSlug: string
+): Promise<LastReadResponse | null> {
+    const res = await fetch(`${API_BASE}/reading/manga/${mangaSlug}/last-read`, {
+        headers: authHeaders(token),
+        cache: "no-store",
+    });
+    if (res.status === 404) return null; // no history yet
+    return handleResponse<LastReadResponse>(res);
+}
+
 // ─── Bookmarks ────────────────────────────────────────────
 
 export async function getBookmarks(
@@ -334,3 +362,35 @@ export async function deleteAvatar(
     return handleResponse<{ message: string }>(res);
 }
 
+
+// ─── Profile: Name & Password ─────────────────────────────
+
+/** PUT /api/v1/auth/me/name — update display name */
+export async function updateName(
+    token: string,
+    name: string
+): Promise<{ message: string; name: string; username: string }> {
+    const res = await fetch(`${API_BASE}/auth/me/name`, {
+        method: "PUT",
+        headers: authHeaders(token),
+        body: JSON.stringify({ name }),
+    });
+    return handleResponse(res);
+}
+
+/** PUT /api/v1/auth/me/password — ganti password (verifikasi password lama) */
+export async function changePassword(
+    token: string,
+    currentPassword: string,
+    newPassword: string
+): Promise<{ message: string }> {
+    const res = await fetch(`${API_BASE}/auth/me/password`, {
+        method: "PUT",
+        headers: authHeaders(token),
+        body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+        }),
+    });
+    return handleResponse(res);
+}

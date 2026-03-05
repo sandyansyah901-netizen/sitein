@@ -1,64 +1,67 @@
-import { fetchMangaList, fetchChapterList, fetchGenres, fetchMangaTypes } from "@/app/lib/api";
+import { fetchMangaList } from "@/app/lib/api";
 import SiteHeader from "@/app/components/SiteHeader";
-import SiteHeroBanner from "@/app/components/SiteHeroBanner";
+import SiteHeroBanner, { type BannerSlotConfig } from "@/app/components/SiteHeroBanner";
 import SiteUpdateSection from "@/app/components/SiteUpdateSection";
 import SiteComicSection from "@/app/components/SiteComicSection";
 import SiteTopRanking from "@/app/components/SiteTopRanking";
 import SiteFooter from "@/app/components/SiteFooter";
 
 const UPDATE_PER_PAGE = 21;
+const API_BASE = "http://127.0.0.1:8000/api/v1";
 
 interface Props {
   searchParams: Promise<{ update_page?: string;[key: string]: string | undefined }>;
+}
+
+// Fetch banner config dari API (server-side, no auth needed)
+async function fetchBannerConfig(): Promise<BannerSlotConfig[]> {
+  try {
+    const res = await fetch(`${API_BASE}/banners`, { next: { revalidate: 60 } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.slots ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function Home({ searchParams }: Props) {
   const sp = await searchParams;
   const updatePage = Math.max(1, parseInt(sp.update_page ?? "1", 10));
 
-  // Fetch manga list untuk update section (21 per page) dan general list
-  const [updateList, allList] = await Promise.all([
+  // ✅ OPTIMIZED: Fetch per-tipe (query lebih ringan, dijamin dapat 14 per tipe)
+  // Semua berjalan paralel — latency sama dengan 1 request
+  const [updateList, manhwaList, manhuaList, mangaList, bannerConfig] = await Promise.all([
     fetchMangaList({
       page: updatePage,
       page_size: UPDATE_PER_PAGE,
-      sort_by: "updated_at",
+      sort_by: "latest_chapter",
       sort_order: "desc",
     }).catch(() => ({ data: [], total: 0, page: updatePage, page_size: UPDATE_PER_PAGE, total_pages: 0 })),
-    fetchMangaList({
-      page: 1,
-      page_size: 30,
-      sort_by: "updated_at",
-      sort_order: "desc",
-    }).catch(() => ({ data: [], total: 0, page: 1, page_size: 30, total_pages: 0 })),
-    fetchGenres().catch(() => []),
-    fetchMangaTypes().catch(() => []),
+    fetchMangaList({ page_size: 14, sort_by: "latest_chapter", sort_order: "desc", type_slug: "manhwa" })
+      .catch(() => ({ data: [] })),
+    fetchMangaList({ page_size: 14, sort_by: "latest_chapter", sort_order: "desc", type_slug: "manhua" })
+      .catch(() => ({ data: [] })),
+    fetchMangaList({ page_size: 14, sort_by: "latest_chapter", sort_order: "desc", type_slug: "manga" })
+      .catch(() => ({ data: [] })),
+    fetchBannerConfig(),
   ]);
 
-  const allMangas = allList.data;
-  const heroBannerMangas = allMangas.slice(0, 3);
+  // Hero banner: pakai 3 manga paling baru dari update section
+  const heroBannerMangas = updateList.data.slice(0, 3);
 
-  // Fetch 2 chapter terakhir untuk setiap manga di update section
-  const updateMangasSlugs = updateList.data.map((m) => m.slug);
-  const chapterResults = await Promise.all(
-    updateMangasSlugs.map((slug) =>
-      fetchChapterList(slug, { page_size: 2, sort_order: "desc" }).catch(() => null)
-    )
-  );
+  const manhwaMangas = manhwaList.data;
+  const manhuaMangas = manhuaList.data;
+  const mangaMangas = mangaList.data;
 
-  // Inject latest_chapters ke manga, sort by chapter terbaru
-  const updateMangas = updateList.data.map((manga, i) => {
-    const chData = chapterResults[i];
-    return {
-      ...manga,
-      latest_chapters: chData?.chapters?.slice(0, 2).map((ch) => ({
-        label: ch.chapter_label,
-        slug: ch.slug,
-        chapter_main: ch.chapter_main,
-        chapter_sub: ch.chapter_sub,
-        created_at: ch.created_at,
-      })) ?? [],
-    };
-  }).sort((a, b) => {
+  // TopRanking: pakai updateList (sudah sorted by latest chapter)
+  const topRankingMangas = updateList.data;
+
+  // ✅ OPTIMIZED: latest_chapters sudah ada di response /manga — tidak perlu 21 request terpisah
+  const updateMangas = updateList.data.map((manga) => ({
+    ...manga,
+    latest_chapters: manga.latest_chapters ?? [],
+  })).sort((a, b) => {
     const toMs = (s?: string) => {
       if (!s) return 0;
       const normalized = s.endsWith("Z") || s.includes("+") ? s : s + "Z";
@@ -69,9 +72,7 @@ export default async function Home({ searchParams }: Props) {
     return bMs - aMs;
   });
 
-  const manhwaMangas = allMangas.filter((m) => m.type?.slug === "manhwa").slice(0, 14);
-  const manhuaMangas = allMangas.filter((m) => m.type?.slug === "manhua").slice(0, 14);
-  const mangaMangas = allMangas.filter((m) => m.type?.slug === "manga").slice(0, 14);
+
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#0a0a0a]" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -90,7 +91,7 @@ export default async function Home({ searchParams }: Props) {
         </div>
       </div>
 
-      <SiteHeroBanner mangas={heroBannerMangas} />
+      <SiteHeroBanner mangas={heroBannerMangas} bannerConfig={bannerConfig} />
       <SiteUpdateSection
         mangas={updateMangas}
         currentPage={updatePage}
@@ -115,8 +116,8 @@ export default async function Home({ searchParams }: Props) {
         <div className="h-2 bg-gray-50 dark:bg-[#111] rounded" />
       </div>
 
-      <SiteTopRanking title="Webtoon Top 300" mangas={allMangas.slice(0, 10)} />
-      <SiteTopRanking title="Novel Top 300" mangas={allMangas.slice(10, 20)} />
+      <SiteTopRanking title="Webtoon Top 300" mangas={topRankingMangas.slice(0, 10)} />
+      <SiteTopRanking title="Novel Top 300" mangas={topRankingMangas.slice(10, 20)} />
 
       <SiteFooter />
     </div>

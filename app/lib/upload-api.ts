@@ -45,6 +45,22 @@ export interface UploadProgress {
   [key: string]: unknown;
 }
 
+export interface SmartImportStatus {
+  job_id: string;
+  status: string;             // queued | running | completed | failed
+  message?: string;
+  progress?: number;          // 0-100
+  current_manga?: string;
+  current_chapter?: string;
+  manga_index?: number;
+  total_manga?: number;
+  total_chapters?: number;
+  total_files?: number;
+  completed_files?: number;
+  result?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export interface UploadResult {
   [key: string]: unknown;
 }
@@ -57,6 +73,10 @@ export async function fetchUploadHealth(): Promise<UploadHealth> {
 
 export async function fetchUploadProgress(uploadId: string): Promise<UploadProgress> {
   return uploadFetch(`${API_BASE_URL}/upload/progress/${uploadId}`) as Promise<UploadProgress>;
+}
+
+export async function fetchSmartImportStatus(jobId: string): Promise<SmartImportStatus> {
+  return uploadFetch(`${API_BASE_URL}/upload/smart-import/status/${jobId}`) as Promise<SmartImportStatus>;
 }
 
 export async function resumeUpload(resumeToken: string): Promise<UploadResult> {

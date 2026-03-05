@@ -124,7 +124,7 @@ export default function SiteUpdateSection({ mangas, currentPage, totalPages }: P
 
       {/* Pagination — hanya muncul jika total pages > 1 */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-1.5 mt-5">
+        <div className="flex items-center justify-center gap-1.5 flex-wrap mt-5">
           {/* Prev */}
           {hasPrev ? (
             <Link

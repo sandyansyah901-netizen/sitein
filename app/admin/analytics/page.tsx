@@ -649,6 +649,15 @@ function TopMangaTab() {
 
 // ─── Tab: Recent Activity ─────────────────────────────────────────────────────
 
+/** Deteksi apakah IP masih dalam format hash SHA-256 lama (panjang 32 hex chars) */
+function formatIp(ip: string | null | undefined): { label: string; isHash: boolean } {
+    if (!ip || ip === "—" || ip === "unknown") return { label: "—", isHash: false };
+    // SHA-256 hash[:32] = 32 karakter hex lowercase
+    const isHash = /^[a-f0-9]{32}$/i.test(ip);
+    if (isHash) return { label: `🔒 ${ip.slice(0, 8)}…`, isHash: true };
+    return { label: ip, isHash: false };
+}
+
 function RecentActivityTab() {
     const [data, setData] = useState<RecentActivityResponse | null>(null);
     const [loading, setLoading] = useState(true);
@@ -692,55 +701,76 @@ function RecentActivityTab() {
             {error && <ErrorBox message={error} />}
 
             <div className="overflow-hidden rounded-xl border border-border bg-card-bg">
-                {loading ? (
-                    <div className="divide-y divide-border">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                            <div key={i} className="flex items-center gap-3 px-4 py-3">
-                                <div className="h-8 w-8 animate-pulse rounded-full bg-border" />
-                                <div className="flex-1 space-y-1">
-                                    <div className="h-3 w-48 animate-pulse rounded bg-border" />
-                                    <div className="h-3 w-24 animate-pulse rounded bg-border" />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="divide-y divide-border">
-                        {data?.recent_activity.map((act, i) => (
-                            <div key={i} className="flex items-center gap-3 px-4 py-3 hover:bg-border/30 transition-colors">
-                                <div
-                                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${act.type === "view"
-                                        ? "bg-blue-500/10 text-blue-400"
-                                        : "bg-pink-500/10 text-pink-400"
-                                        }`}
-                                >
-                                    {act.type === "view" ? "👁" : "🔖"}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm text-foreground truncate">
-                                        <span className="font-medium">{act.username}</span>
-                                        <span className="text-muted">
-                                            {" "}{act.type === "view" ? "melihat" : "mem-bookmark"}{" "}
-                                        </span>
-                                        <span className="font-medium">{act.manga_title}</span>
-                                    </p>
-                                </div>
-                                <span className="text-xs text-muted shrink-0">{relativeTime(act.timestamp)}</span>
-                                <span
-                                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${act.type === "view"
-                                        ? "bg-blue-500/10 text-blue-400"
-                                        : "bg-pink-500/10 text-pink-400"
-                                        }`}
-                                >
-                                    {act.type === "view" ? "View" : "Bookmark"}
-                                </span>
-                            </div>
-                        ))}
-                        {data?.recent_activity.length === 0 && (
-                            <p className="px-4 py-8 text-center text-sm text-muted">Belum ada aktivitas.</p>
-                        )}
-                    </div>
-                )}
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                        <thead>
+                            <tr className="border-b border-border bg-background/50 text-left text-xs uppercase tracking-wider text-muted">
+                                <th className="px-4 py-3 w-8">Tipe</th>
+                                <th className="px-4 py-3">User</th>
+                                <th className="px-4 py-3">Manga</th>
+                                <th className="px-4 py-3">IP Address</th>
+                                <th className="px-4 py-3 text-right">Waktu</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {loading ? (
+                                <LoadingRows cols={5} />
+                            ) : data?.recent_activity.length === 0 ? (
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted">
+                                        Belum ada aktivitas.
+                                    </td>
+                                </tr>
+                            ) : (
+                                data?.recent_activity.map((act, i) => {
+                                    const ipInfo = formatIp((act as { ip_address?: string }).ip_address);
+                                    return (
+                                        <tr key={i} className="hover:bg-border/30 transition-colors">
+                                            {/* Type badge */}
+                                            <td className="px-4 py-3">
+                                                <span className={`flex h-7 w-7 items-center justify-center rounded-full text-sm ${act.type === "view"
+                                                    ? "bg-blue-500/10 text-blue-400"
+                                                    : "bg-pink-500/10 text-pink-400"
+                                                    }`}>
+                                                    {act.type === "view" ? "👁" : "🔖"}
+                                                </span>
+                                            </td>
+                                            {/* User */}
+                                            <td className="px-4 py-3">
+                                                <span className={`font-medium ${act.username === "Anonymous" ? "text-muted italic" : "text-foreground"}`}>
+                                                    {act.username}
+                                                </span>
+                                            </td>
+                                            {/* Manga title */}
+                                            <td className="px-4 py-3 max-w-[200px] truncate text-foreground">
+                                                {act.manga_title}
+                                            </td>
+                                            {/* IP Address */}
+                                            <td className="px-4 py-3">
+                                                {ipInfo.label === "—" ? (
+                                                    <span className="text-muted">—</span>
+                                                ) : (
+                                                    <span className={`font-mono text-xs px-2 py-0.5 rounded ${ipInfo.isHash
+                                                        ? "bg-border text-muted"
+                                                        : "bg-emerald-900/20 text-emerald-400"
+                                                        }`}
+                                                        title={ipInfo.isHash ? "IP lama (hash SHA-256)" : "IP visitor"}
+                                                    >
+                                                        {ipInfo.label}
+                                                    </span>
+                                                )}
+                                            </td>
+                                            {/* Time */}
+                                            <td className="px-4 py-3 text-right text-xs text-muted whitespace-nowrap">
+                                                {relativeTime(act.timestamp)}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     );
@@ -753,8 +783,8 @@ type CleanupResult = ViewsDeleteResult & { _action?: string };
 function ResultBox({ result, onClose }: { result: CleanupResult; onClose: () => void }) {
     return (
         <div className={`flex items-start gap-3 rounded-lg border p-4 text-sm ${result.success
-                ? "border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
-                : "border-red-800/40 bg-red-900/20 text-red-400"
+            ? "border-emerald-800/40 bg-emerald-900/20 text-emerald-400"
+            : "border-red-800/40 bg-red-900/20 text-red-400"
             }`}>
             <span className="text-lg">{result.success ? "✅" : "❌"}</span>
             <div className="flex-1">
@@ -816,10 +846,10 @@ function DeleteButton({
                     onClick={handleClick}
                     disabled={status === "loading"}
                     className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 ${status === "confirm"
-                            ? "bg-red-600 text-white hover:bg-red-700"
-                            : danger
-                                ? "border border-red-700/50 text-red-400 hover:bg-red-900/30"
-                                : "border border-border text-muted hover:bg-border hover:text-foreground"
+                        ? "bg-red-600 text-white hover:bg-red-700"
+                        : danger
+                            ? "border border-red-700/50 text-red-400 hover:bg-red-900/30"
+                            : "border border-border text-muted hover:bg-border hover:text-foreground"
                         }`}
                 >
                     {status === "loading" ? "Menghapus..." : status === "confirm" ? "Ya, Hapus" : "🗑 Hapus"}
